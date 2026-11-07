@@ -106,7 +106,8 @@ public class UfoAlert : Form
     float totalArc;
 
     // ---- Title orbiting the spiral ----
-    const float RING_S = 0.92f;                // height on the funnel (0 = UFO, 1 = bottom)
+    const float RING_S = 0.72f;                // height on the cone (0 = UFO, 1 = bottom)
+    const float RING_OUT = 1.3f;               // ring radius vs cone radius (>1 = orbits outside the strands)
     const float FUNNEL_R = 115f;               // radius of the cone where it ends
     const float FUNNEL_END = BANNER_TOP + 24f; // y where the spiral ends
     const double ORBIT = 2 * Math.PI / 36000;  // one full turn every 36 s (very slow)
@@ -197,7 +198,7 @@ public class UfoAlert : Form
             glyphAdv[i] = TextAdvance(sc, titleFont) + TITLE_TRACKING;
             totalArc += glyphAdv[i];
             float boxW = glyphAdv[i] + 8f;
-            glyphs[i]     = MakeTextBmp(sc, titleFont, boxW, 26f, Color.White, true, out glyphSize[i]);
+            glyphs[i]     = MakeTextBmp(sc, titleFont, boxW, 26f, Color.FromArgb(225, 236, 240, 246), true, out glyphSize[i]);
             glyphsRed[i]  = MakeTextBmp(sc, titleFont, boxW, 26f, Color.FromArgb(255, 50, 90), false, out glyphSize[i]);
             glyphsCyan[i] = MakeTextBmp(sc, titleFont, boxW, 26f, Color.FromArgb(40, 225, 255), false, out glyphSize[i]);
         }
@@ -396,7 +397,7 @@ public class UfoAlert : Form
         float len = bottom - top;
         if (len < 2f || glyphs == null) return;
         float rBot = rTop + (rBotIn - rTop) * beam;            // same widening as DrawVortex
-        float R = rTop + (rBot - rTop) * RING_S;
+        float R = (rTop + (rBot - rTop) * RING_S) * RING_OUT;  // a little outside the cone
         if (R < 10f) return;
 
         // Start centred at the front, then turn slowly
@@ -410,8 +411,8 @@ public class UfoAlert : Form
             if (glyphs[i] == null) continue;
 
             double th = theta0 - mid / R;
-            float d;
-            PointF pt = Funnel(cx, top, len, rTop, rBot, RING_S, th, out d);
+            float d = (float)Math.Sin(th);
+            PointF pt = new PointF(cx + R * (float)Math.Cos(th), top + RING_S * len + d * R * 0.34f);
             if ((d >= 0) != front) continue;
             if (Math.Abs(d) < 0.05f) continue;                  // edge-on: too thin to see
 
@@ -567,7 +568,7 @@ public class UfoAlert : Form
         float f = Math.Max(1.5f, radius * scale / 2.2f);                 // downscale factor (device px)
         int sw = Math.Max(1, (int)Math.Ceiling(bw * scale / f));
         int sh = Math.Max(1, (int)Math.Ceiling(bh * scale / f));
-        Color boosted = Color.FromArgb(Math.Min(255, (int)(c.A * 1.25f)), c.R, c.G, c.B);
+        Color boosted = Color.FromArgb(Math.Min(255, (int)(c.A * 1.0f)), c.R, c.G, c.B);
         using (Bitmap small = new Bitmap(sw, sh, PixelFormat.Format32bppArgb))
         {
             using (Graphics gs = Graphics.FromImage(small))
@@ -621,8 +622,8 @@ public class UfoAlert : Form
 
             if (glow)
             {
-                Glow(g, path, Color.FromArgb(77, 255, 220, 150), 20f, bw, bh);  // 0 0 20px rgba(255,220,150,.3)
-                Glow(g, path, Color.FromArgb(128, 255, 255, 255), 10f, bw, bh); // 0 0 10px rgba(255,255,255,.5)
+                Glow(g, path, Color.FromArgb(30, 255, 220, 150), 16f, bw, bh);  // softer warm halo
+                Glow(g, path, Color.FromArgb(55, 255, 255, 255), 8f, bw, bh);   // softer white glow
             }
             using (SolidBrush fill = new SolidBrush(color)) g.FillPath(fill, path);
         }
