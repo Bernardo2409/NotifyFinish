@@ -37,12 +37,19 @@ message="$(json_field message)"
 cwd="$(json_field cwd)"
 project="$(basename "${cwd:-Claude Code}")"
 
+# Short messages (max 4 words); one is picked at random for each alert
+# (keep in sync with src/Alerts.cs)
+FINISHED_LINES=("Agent Finish" "Agent is done" "Mission accomplished" "Agent has landed"
+                "Task complete, Agent" "Agent standing by" "Ready for orders" "Transmission complete")
+NEEDS_YOU_LINES=("Agent needs you" "Agent awaits orders" "Your move, human" "Permission requested"
+                 "Awaiting your command" "Agent needs input" "Need your approval")
+
 if [ "$event" = "Notification" ]; then
-    title="Claude needs you"
-    body="$project - ${message:-Waiting for your input}"
+    title="${NEEDS_YOU_LINES[RANDOM % ${#NEEDS_YOU_LINES[@]}]}"
+    body=""
     urgent=1
 else
-    title="Claude Finish"
+    title="${FINISHED_LINES[RANDOM % ${#FINISHED_LINES[@]}]}"
     body=""
     urgent=0
 fi

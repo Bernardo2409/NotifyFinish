@@ -33,12 +33,43 @@ public static class Alerts
         return m.Success ? Regex.Replace(m.Groups[1].Value, "\\\\(.)", "$1") : null;
     }
 
+    // Short messages (max 4 words); one is picked at random for each alert
+    public static readonly string[] FinishedLines = {
+        "Agent Finish",
+        "Agent is done",
+        "Mission accomplished",
+        "Agent has landed",
+        "Task complete, Agent",
+        "Agent standing by",
+        "Ready for orders",
+        "Transmission complete",
+    };
+    public static readonly string[] NeedsYouLines = {
+        "Agent needs you",
+        "Agent awaits orders",
+        "Your move, human",
+        "Permission requested",
+        "Awaiting your command",
+        "Agent needs input",
+        "Need your approval",
+    };
+
+    static readonly Random rnd = new Random();
+    static string lastLine;
+    static string Pick(string[] lines)
+    {
+        string s;
+        do { s = lines[rnd.Next(lines.Length)]; } while (s == lastLine && lines.Length > 1);   // no immediate repeat
+        lastLine = s;
+        return s;
+    }
+
     // Builds (but does not show) the alert for a hook event. Plays the sound.
     public static Form Create(string hookJson, int seconds, string appDir)
     {
         string ev = JsonField(hookJson, "hook_event_name") ?? "Stop";
         bool needsYou = ev == "Notification";
-        string title = needsYou ? "Claude needs you" : "Claude Finish";
+        string title = Pick(needsYou ? NeedsYouLines : FinishedLines);
         Color accent = needsYou ? Color.FromArgb(235, 140, 0) : Color.FromArgb(30, 170, 80);
 
         try { SystemSounds.Exclamation.Play(); } catch { }
