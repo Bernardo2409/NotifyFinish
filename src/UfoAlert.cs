@@ -64,8 +64,8 @@ public class UfoAlert : Form
     const float RING_OUT = 1.3f;               // ring radius vs cone radius (>1 = orbits outside the strands)
     const float FUNNEL_R = 115f;               // radius of the cone where it ends
     const float FUNNEL_END = BANNER_TOP + 24f; // y where the spiral ends
-    const double ORBIT = 2 * Math.PI / 36000;  // one full turn every 36 s (very slow)
-    const double START_IN = 0.5;               // first letter starts this far (radians) past the left edge
+    const double START_IN = 0.45;              // first letter starts / last letter ends this far (radians) from the edge
+    const double MIN_SWEEP = 0.35;             // always turn at least this much (radians), even for long phrases
     const double REVEAL_STAGGER = 70;          // ms between letters appearing
     const double REVEAL_FADE = 260;            // ms for each letter to fade in
     SizeF subSize;
@@ -363,9 +363,22 @@ public class UfoAlert : Form
         if (R < 10f) return;
 
         // Start centred at the front, then turn slowly
-        // the first letter starts just past the left edge of the spiral (angle PI = left edge,
-        // PI/2 = front centre) when the beam has fully opened, then everything drifts right slowly
-        double theta0 = Math.PI - START_IN + glyphAdv[0] / (2.0 * R) - (t - (DESC + BEAM)) * ORBIT;
+        // "Justified" orbit (angle PI = left edge, PI/2 = front centre, 0 = right edge):
+        // when the beam has fully opened the FIRST letter sits just past the left edge, and when the
+        // alert starts to leave the LAST letter sits just before the right edge - so the first and the
+        // last word are on show for the same time. The speed adapts to the phrase length and duration.
+        double half = totalArc / (2.0 * R);
+        double cStart = Math.PI - START_IN - (half - glyphAdv[0] / (2.0 * R));
+        double cEnd = START_IN + (half - glyphAdv[glyphAdv.Length - 1] / (2.0 * R));
+        if (cStart - cEnd < MIN_SWEEP)
+        {
+            double mid = (cStart + cEnd) / 2.0;
+            cStart = mid + MIN_SWEEP / 2.0;
+            cEnd = mid - MIN_SWEEP / 2.0;
+        }
+        double ts = DESC + BEAM, te = DESC + BEAM + stayMs;
+        double centre = cStart + (cEnd - cStart) * (t - ts) / (te - ts);
+        double theta0 = centre + half;
         double arc = 0;
         for (int i = 0; i < glyphs.Length; i++)
         {
