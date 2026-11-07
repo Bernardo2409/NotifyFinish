@@ -123,11 +123,11 @@ class TrayContext : ApplicationContext
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
 
         // Style ids on disk stay "ufo" / "ufo-classic" / "simple"; these are just the display names
-        ufoItem = new ToolStripMenuItem("Mothership  \u2014  the full show", null, delegate { SetStyle("ufo"); });
+        ufoItem = new ToolStripMenuItem("Mothership - the full show", null, delegate { SetStyle("ufo"); });
         ufoItem.ToolTipText = "Animated UFO, 3D spiral beam, smoke and orbiting text (uses the most CPU)";
-        classicItem = new ToolStripMenuItem("Scout Ship  \u2014  light UFO", null, delegate { SetStyle("ufo-classic"); });
+        classicItem = new ToolStripMenuItem("Scout Ship - light UFO", null, delegate { SetStyle("ufo-classic"); });
         classicItem.ToolTipText = "The original UFO: simple beam and a rounded banner";
-        simpleItem = new ToolStripMenuItem("Beacon  \u2014  minimal banner", null, delegate { SetStyle("simple"); });
+        simpleItem = new ToolStripMenuItem("Beacon - minimal banner", null, delegate { SetStyle("simple"); });
         simpleItem.ToolTipText = "A flat banner that blinks 3 times (lightest)";
         ToolStripMenuItem styleMenu = new ToolStripMenuItem("Style");
         styleMenu.DropDownItems.Add(ufoItem);
