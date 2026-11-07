@@ -3,7 +3,7 @@
 A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, macOS and Linux**: when Claude finishes a response (or needs your input), a sound plays and a notification pops up, even while you're watching a video or playing a game.
 
 - **Green** ("Agent Finish", "Mission done", "Agent has landed", ...): Claude finished its turn.
-- **Orange** ("Agent needs you", "Your move, human", "Awaiting orders", ...): Claude is waiting for a permission or an answer.
+- **Orange** ("Agent needs you", "Awaiting orders", "Input needed", ...): Claude is waiting for a permission or an answer.
 
 Each alert picks one short message (max 4 words, max 16 characters so it fits around the spiral) at random. Edit the lists in `src/Alerts.cs` (Windows) and `notify.sh` (macOS/Linux).
 

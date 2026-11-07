@@ -47,7 +47,6 @@ public static class Alerts
     };
     public static readonly string[] NeedsYouLines = {
         "Agent needs you",
-        "Your move, human",
         "Awaiting orders",
         "Input needed",
         "Need your OK",

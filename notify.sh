@@ -41,7 +41,7 @@ project="$(basename "${cwd:-Claude Code}")"
 # (keep in sync with src/Alerts.cs)
 FINISHED_LINES=("Agent Finish" "Agent is done" "Mission done" "Agent has landed"
                 "Task complete" "Ready for orders" "All done here" "Job done")
-NEEDS_YOU_LINES=("Agent needs you" "Your move, human" "Awaiting orders" "Input needed"
+NEEDS_YOU_LINES=("Agent needs you" "Awaiting orders" "Input needed"
                  "Need your OK" "Your call, boss")
 
 if [ "$event" = "Notification" ]; then
