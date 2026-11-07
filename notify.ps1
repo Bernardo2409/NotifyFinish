@@ -68,7 +68,7 @@ public class UfoAlert : Form
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
 
     // ---- Layout (logical px at 100% scaling) ----
-    const float W = 520f;
+    const float W = 640f;
     const float REST = 56f;        // saucer centre when hovering
     const float ABOVE = -80f;      // off-screen, above the top edge
     const float BANNER_TOP = 156f;
@@ -79,7 +79,7 @@ public class UfoAlert : Form
     readonly string title, subtitle;
     readonly Color accent;
     readonly double stayMs;
-    readonly float H, scale, bannerW, bannerH;
+    readonly float H, scale, bannerW, bannerH, discW, discH;
     readonly Font titleFont, subFont;
     readonly Timer timer;
     DateTime start;
@@ -136,17 +136,19 @@ public class UfoAlert : Form
         {
             float tw = mg.MeasureString(this.title, titleFont).Width;
             float sw = this.subtitle.Length > 0 ? mg.MeasureString(this.subtitle, subFont).Width : 0f;
-            bannerW = Math.Min(W - 24f, Math.Max(260f, Math.Max(tw, sw) + 64f));
+            bannerW = Math.Min(470f, Math.Max(240f, Math.Max(tw, sw) + 40f));
         }
-        H = BANNER_TOP + bannerH + 16f;
+        discW = Math.Min(W - 16f, bannerW * 1.3f);
+        discH = bannerH * 1.9f + 10f;
+        H = BANNER_TOP + bannerH / 2f + discH * 0.5f * 1.35f + 8f;
 
         // Pre-render the text once; each frame it's redrawn as jittered 1px slices (fuzzy text)
         float titleH = this.subtitle.Length > 0 ? 44f : bannerH;
-        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.White, true, out titleSize);
+        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(16, 18, 24), false, out titleSize);
         titleRed  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(255, 50, 90), false, out titleSize);
         titleCyan = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(40, 225, 255), false, out titleSize);
         if (this.subtitle.Length > 0)
-            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 24f, Color.White, true, out subSize);
+            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 24f, Color.FromArgb(25, 28, 36), false, out subSize);
         strandPen.StartCap = strandPen.EndCap = LineCap.Round;
         glowPen.StartCap = glowPen.EndCap = LineCap.Round;
 
@@ -404,6 +406,51 @@ public class UfoAlert : Form
         }
     }
 
+    // Soft radial light: colour c at the centre fading to transparent at the ellipse edge
+    static void FillGlow(Graphics g, RectangleF r, Color c, float[] factors, float[] positions)
+    {
+        if (c.A == 0 || r.Width < 1 || r.Height < 1) return;
+        using (GraphicsPath p = new GraphicsPath())
+        {
+            p.AddEllipse(r);
+            using (PathGradientBrush pg = new PathGradientBrush(p))
+            {
+                pg.CenterColor = c;
+                pg.SurroundColors = new Color[] { Color.FromArgb(0, c) };
+                Blend bl = new Blend();
+                bl.Factors = factors;
+                bl.Positions = positions;
+                pg.Blend = bl;
+                g.FillPath(pg, p);
+            }
+        }
+    }
+
+    // Clouds/haze lit by the projector: slowly drifting darker puffs inside the light disc
+    void DrawHaze(Graphics g, RectangleF disc, float p, double t)
+    {
+        RectangleF src = new RectangleF(0, 0, 64, 64);
+        float cxd = disc.X + disc.Width / 2f, cyd = disc.Y + disc.Height / 2f;
+        for (int k = 0; k < 11; k++)
+        {
+            float px = cxd + ((k % 4) - 1.5f) * disc.Width * 0.26f + (float)Math.Sin(t * 0.00035 + k * 1.7) * 10f;
+            float py = cyd + ((k / 4) - 1f) * disc.Height * 0.3f + (float)Math.Cos(t * 0.00028 + k) * 4f;
+            float rr = disc.Height * (0.32f + (k % 3) * 0.08f);
+            ColorMatrix cm = new ColorMatrix();
+            float tint = 0.62f;
+            cm.Matrix00 = Mix(accent, Color.Black, 0.35f).R / 255f * tint;
+            cm.Matrix11 = Mix(accent, Color.Black, 0.35f).G / 255f * tint;
+            cm.Matrix22 = Mix(accent, Color.Black, 0.35f).B / 255f * tint;
+            cm.Matrix33 = 0.2f * p;
+            using (ImageAttributes ia = new ImageAttributes())
+            {
+                ia.SetColorMatrix(cm);
+                PointF[] dst = { new PointF(px - rr, py - rr), new PointF(px + rr, py - rr), new PointF(px - rr, py + rr) };
+                g.DrawImage(smoke[k % 2], dst, src, GraphicsUnit.Pixel, ia);
+            }
+        }
+    }
+
     // Text rendered once at device resolution, centred in a box of logical size w x h
     Bitmap MakeTextBmp(string text, Font font, float w, float h, Color color, bool withShadow, out SizeF logical)
     {
@@ -567,18 +614,24 @@ public class UfoAlert : Form
                     g.ScaleTransform(s, s);
                     g.TranslateTransform(-cx, -(bTop + bannerH / 2f));
 
-                    using (GraphicsPath shadow = RoundRect(new RectangleF(r.X, r.Y + 5, r.Width, r.Height), 16f))
-                    using (SolidBrush sbr = new SolidBrush(Color.FromArgb((int)(70 * p), 0, 0, 0)))
-                        g.FillPath(sbr, shadow);
-                    using (GraphicsPath box = RoundRect(r, 16f))
+                    // Projection: a Bat-Signal-style disc of light on the "sky", with lit haze,
+                    // and the message as a dark silhouette inside it
+                    float dcy = bTop + bannerH / 2f;
+                    RectangleF disc = new RectangleF(cx - discW / 2f, dcy - discH / 2f, discW, discH);
+                    Color light = Mix(accent, Color.White, 0.72f);
+                    RectangleF halo = RectangleF.Inflate(disc, discW * 0.17f, discH * 0.17f);
+                    FillGlow(g, halo, A(light, 75 * p), new float[] { 0f, 0.6f, 1f }, new float[] { 0f, 0.5f, 1f });
+                    FillGlow(g, disc, A(light, 245 * p), new float[] { 0f, 0.72f, 0.95f, 1f }, new float[] { 0f, 0.08f, 0.35f, 1f });
+                    using (GraphicsPath hazeClip = new GraphicsPath())
                     {
-                        using (LinearGradientBrush fill = new LinearGradientBrush(
-                            new PointF(0, r.Top), new PointF(0, r.Bottom + 1),
-                            A(Mix(accent, Color.White, 0.25f), 250 * p), A(Mix(accent, Color.Black, 0.12f), 250 * p)))
-                            g.FillPath(fill, box);
-                        using (Pen edge = new Pen(Color.FromArgb((int)(110 * p), 255, 255, 255), 1.5f))
-                            g.DrawPath(edge, box);
+                        hazeClip.AddEllipse(disc);
+                        GraphicsState hs = g.Save();
+                        g.SetClip(hazeClip, CombineMode.Intersect);
+                        DrawHaze(g, disc, p, t);
+                        g.Restore(hs);
                     }
+                    using (Pen rimPen = new Pen(A(light, 110 * p), 2f))
+                        g.DrawEllipse(rimPen, RectangleF.Inflate(disc, -discW * 0.025f, -discH * 0.025f));
 
                     RectangleF tr = subtitle.Length > 0
                         ? new RectangleF(r.X + 12, r.Y + 4, titleSize.Width, titleSize.Height)
@@ -601,19 +654,20 @@ public class UfoAlert : Form
                     // Scanlines + a rolling bright bar while the signal is bad
                     if (tv > 0.03f)
                     {
-                        using (GraphicsPath clip = RoundRect(r, 16f))
+                        using (GraphicsPath clip = new GraphicsPath())
                         {
+                            clip.AddEllipse(disc);
                             GraphicsState cs = g.Save();
                             g.SetClip(clip, CombineMode.Intersect);
-                            using (Pen sl = new Pen(Color.FromArgb((int)(85 * tv * p), 0, 0, 0), 1f))
-                                for (float sy = r.Top + (float)((t / 45.0) % 3.0); sy < r.Bottom; sy += 3f)
-                                    g.DrawLine(sl, r.Left, sy, r.Right, sy);
-                            float bar = r.Top - 14f + (float)((t / 5.0) % (r.Height + 28f));
+                            using (Pen sl = new Pen(Color.FromArgb((int)(70 * tv * p), 0, 0, 0), 1f))
+                                for (float sy = disc.Top + (float)((t / 45.0) % 3.0); sy < disc.Bottom; sy += 3f)
+                                    g.DrawLine(sl, disc.Left, sy, disc.Right, sy);
+                            float bar = disc.Top - 14f + (float)((t / 5.0) % (disc.Height + 28f));
                             using (LinearGradientBrush lb = new LinearGradientBrush(new PointF(0, bar - 13), new PointF(0, bar + 13),
-                                Color.FromArgb(0, 255, 255, 255), Color.FromArgb((int)(80 * tv * p), 255, 255, 255)))
+                                Color.FromArgb(0, 255, 255, 255), Color.FromArgb((int)(90 * tv * p), 255, 255, 255)))
                             {
                                 lb.SetBlendTriangularShape(0.5f);
-                                g.FillRectangle(lb, r.Left, bar - 12, r.Width, 24);
+                                g.FillRectangle(lb, disc.Left, bar - 12, disc.Width, 24);
                             }
                             g.Restore(cs);
                         }
