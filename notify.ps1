@@ -1,10 +1,14 @@
 # NotifyFinish - visual alert + sound when Claude Code finishes or needs your input.
 # Called by the Stop / Notification hooks. Receives the hook JSON on stdin.
 param(
-    [int]$Seconds = 8   # how long the alert stays on screen (click to close earlier)
+    [int]$Seconds = 8,  # how long the alert stays on screen (click to close earlier)
+    [switch]$Force      # show even when alerts are turned off (used by "Test alert")
 )
 
 $ErrorActionPreference = 'SilentlyContinue'
+
+# --- Turned off from the tray app (or `notify.sh off`)? ---------------------------
+if (-not $Force -and (Test-Path (Join-Path $env:USERPROFILE '.claude\notifyfinish.off'))) { exit 0 }
 
 # --- Read the hook JSON -------------------------------------------------------
 $raw = [Console]::In.ReadToEnd()

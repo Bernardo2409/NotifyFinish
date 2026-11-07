@@ -62,6 +62,35 @@ A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, mac
 
 The first time, macOS may attribute the notification to **Script Editor** (or `terminal-notifier`). Make sure it's allowed in **System Settings → Notifications**, and set its style to **Banners** or **Alerts**. Focus modes (Do Not Disturb, Gaming) will hide them.
 
+## Turn alerts on / off
+
+### Windows: tray app
+
+A small app that sits in the system tray as a traffic light:
+**green = alerts ON**, **red = alerts OFF**. **Left-click the icon to toggle.**
+
+Right-click menu: *Alerts enabled*, *Test alert*, *Start with Windows*, *Exit*.
+
+Build it once (uses the C# compiler that ships with Windows, nothing to install):
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\build.ps1
+.\NotifyFinish.exe
+```
+
+Then right-click the tray icon → **Start with Windows** so it's always there.
+
+### macOS / Linux
+
+```sh
+bash notify.sh off      # turn alerts off
+bash notify.sh on       # turn alerts on
+bash notify.sh toggle
+bash notify.sh status
+```
+
+Both use the same switch: the file `~/.claude/notifyfinish.off`. While it exists, the hooks still run but show nothing.
+
 ## Test it
 
 ```sh

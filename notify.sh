@@ -3,7 +3,25 @@
 # macOS and Linux version. Called by the Stop / Notification hooks.
 # Receives the hook JSON on stdin.
 #
-# Usage: notify.sh [seconds]   (how long the notification stays up, default 8)
+# Usage: notify.sh [seconds]          show the alert (default 8 s) - used by the hooks
+#        notify.sh on|off|toggle      turn alerts on/off (same switch as the Windows tray app)
+#        notify.sh status             print ON or OFF
+
+FLAG="$HOME/.claude/notifyfinish.off"
+
+cmd="$1"
+if [ "$cmd" = "toggle" ]; then
+    if [ -f "$FLAG" ]; then cmd=on; else cmd=off; fi
+fi
+
+case "$cmd" in
+    on)     rm -f "$FLAG"; echo "NotifyFinish: ON"; exit 0 ;;
+    off)    mkdir -p "$HOME/.claude" && echo off > "$FLAG"; echo "NotifyFinish: OFF"; exit 0 ;;
+    status) if [ -f "$FLAG" ]; then echo "NotifyFinish: OFF"; else echo "NotifyFinish: ON"; fi; exit 0 ;;
+esac
+
+# Alerts turned off? Do nothing.
+[ -f "$FLAG" ] && exit 0
 
 SECONDS_UP="${1:-8}"
 
