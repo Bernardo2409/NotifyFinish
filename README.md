@@ -118,3 +118,5 @@ echo '{"hook_event_name":"Stop"}' | bash notify.sh
 ## License
 
 [MIT](LICENSE)
+
+The UFO text uses [Space Grotesk](https://github.com/floriankarsten/space-grotesk) (bundled in `fonts/`), licensed under the [SIL Open Font License 1.1](fonts/OFL.txt).

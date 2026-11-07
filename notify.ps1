@@ -110,8 +110,36 @@ public class UfoAlert : Form
     const double SPIN = 0.0021;          // radians per ms
     readonly Pen strandPen = new Pen(Color.White, 1f), glowPen = new Pen(Color.White, 4f);
 
-    public static void Run(string title, string subtitle, int r, int g, int b, int seconds)
+    // Space Grotesk ships in ./fonts (SIL OFL) and is loaded privately - nothing to install
+    static System.Drawing.Text.PrivateFontCollection fontPack;
+    static string fontDir;
+
+    static Font SpaceGrotesk(float px, bool bold)
     {
+        try
+        {
+            if (fontPack == null)
+            {
+                if (string.IsNullOrEmpty(fontDir)) return null;
+                fontPack = new System.Drawing.Text.PrivateFontCollection();
+                foreach (string f in new string[] { "SpaceGrotesk-Bold.ttf", "SpaceGrotesk-Regular.ttf" })
+                {
+                    string path = System.IO.Path.Combine(fontDir, f);
+                    if (System.IO.File.Exists(path)) fontPack.AddFontFile(path);
+                }
+            }
+            if (fontPack.Families.Length == 0) return null;
+            FontFamily fam = fontPack.Families[0];
+            FontStyle st = bold && fam.IsStyleAvailable(FontStyle.Bold) ? FontStyle.Bold
+                         : (fam.IsStyleAvailable(FontStyle.Regular) ? FontStyle.Regular : FontStyle.Bold);
+            return new Font(fam, px, st, GraphicsUnit.Pixel);
+        }
+        catch { return null; }
+    }
+
+    public static void Run(string title, string subtitle, int r, int g, int b, int seconds, string fonts)
+    {
+        fontDir = fonts;
         try { SetProcessDPIAware(); } catch { }
         Application.Run(new UfoAlert(title, subtitle, Color.FromArgb(r, g, b), seconds));
     }
@@ -126,29 +154,31 @@ public class UfoAlert : Form
         using (Graphics sg = Graphics.FromHwnd(IntPtr.Zero)) scale = sg.DpiX / 96f;
 
         // Condensed, technical display face (ships with Windows 10/11); falls back gracefully
-        titleFont = PickFont(34f, "Bahnschrift SemiBold Condensed", "Bahnschrift Condensed", "Segoe UI Black");
-        subFont = PickFont(14f, "Bahnschrift SemiCondensed", "Bahnschrift", "Segoe UI");
-        this.title = title.ToUpperInvariant();   // cinematic caps (letter-spacing applied when laid out)
+        // .ufo-title: Space Grotesk 700, 1.25rem (20px), uppercase, letter-spacing .05em
+        // .ufo-subtitle: 0.875rem (14px)
+        titleFont = SpaceGrotesk(20f, true) ?? PickFont(20f, "Bahnschrift SemiBold", "Segoe UI Semibold", "Segoe UI");
+        subFont = SpaceGrotesk(14f, false) ?? PickFont(14f, "Bahnschrift", "Segoe UI");
+        this.title = title.ToUpperInvariant();
 
-        bannerH = this.subtitle.Length > 0 ? 72f : 54f;
+        bannerH = this.subtitle.Length > 0 ? 52f : 34f;
         using (Bitmap tmp = new Bitmap(1, 1))
         using (Graphics mg = Graphics.FromImage(tmp))
         {
             float tw = TextWidth(this.title, titleFont, TITLE_TRACKING);
             float sw = TextWidth(this.subtitle, subFont, SUB_TRACKING);
-            bannerW = Math.Min(380f, Math.Max(200f, Math.Max(tw, sw) + 36f));
+            bannerW = Math.Min(280f, Math.Max(180f, Math.Max(tw, sw) + 24f));   // max-width: 280px
         }
         discW = Math.Min(W - 16f, bannerW * 1.22f);
         discH = bannerH * 1.75f + 6f;
         H = BANNER_TOP + bannerH / 2f + discH * 0.5f * 1.35f + 8f;
 
         // Pre-render the text once; each frame it's redrawn as jittered 1px slices (fuzzy text)
-        float titleH = this.subtitle.Length > 0 ? 46f : bannerH;
-        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(16, 18, 24), true, out titleSize);
+        float titleH = this.subtitle.Length > 0 ? 26f : bannerH;
+        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.White, true, out titleSize);
         titleRed  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(255, 50, 90), false, out titleSize);
         titleCyan = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(40, 225, 255), false, out titleSize);
         if (this.subtitle.Length > 0)
-            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 20f, Color.FromArgb(28, 30, 38), false, out subSize);
+            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 18f, Color.FromArgb(217, 255, 255, 255), false, out subSize);
         strandPen.StartCap = strandPen.EndCap = LineCap.Round;
         glowPen.StartCap = glowPen.EndCap = LineCap.Round;
 
@@ -463,8 +493,8 @@ public class UfoAlert : Form
         return new Font(FontFamily.GenericSansSerif, px, FontStyle.Bold, GraphicsUnit.Pixel);
     }
 
-    const float TITLE_TRACKING = 2.5f;   // extra space between title letters (px)
-    const float SUB_TRACKING = 0.3f;
+    const float TITLE_TRACKING = 1f;     // letter-spacing: 0.05em of 20px
+    const float SUB_TRACKING = 0f;
 
     // Lays the text out glyph by glyph so we control letter-spacing exactly
     static GraphicsPath BuildTextPath(string text, Font font, float tracking)
@@ -492,14 +522,52 @@ public class UfoAlert : Form
         using (GraphicsPath p = BuildTextPath(text, font, tracking)) return p.GetBounds().Width;
     }
 
-    const int EXTRUDE = 4;   // depth of the 3D letters (px)
 
     // Text rendered once at device resolution, centred in a box of logical size w x h.
     // threeD = extruded letters (accent-tinted sides, metallic face, lit top edge, soft shadow).
-    Bitmap MakeTextBmp(string text, Font font, float w, float h, Color color, bool threeD, out SizeF logical)
+    const float TEXT_PAD = 18f;   // room around the text for the glow
+
+    // Soft glow like CSS text-shadow: 0 0 <radius>px <color>.
+    // Real blur: render the text small, then scale it back up with bicubic filtering.
+    void Glow(Graphics g, GraphicsPath path, Color c, float radius, float bw, float bh)
     {
-        logical = new SizeF(w, h);
-        Bitmap b = new Bitmap(Math.Max(1, (int)Math.Ceiling(w * scale)), Math.Max(1, (int)Math.Ceiling(h * scale)), PixelFormat.Format32bppArgb);
+        float f = Math.Max(1.5f, radius * scale / 2.2f);                 // downscale factor (device px)
+        int sw = Math.Max(1, (int)Math.Ceiling(bw * scale / f));
+        int sh = Math.Max(1, (int)Math.Ceiling(bh * scale / f));
+        Color boosted = Color.FromArgb(Math.Min(255, (int)(c.A * 1.25f)), c.R, c.G, c.B);
+        using (Bitmap small = new Bitmap(sw, sh, PixelFormat.Format32bppArgb))
+        {
+            using (Graphics gs = Graphics.FromImage(small))
+            {
+                gs.Clear(Color.Transparent);
+                gs.SmoothingMode = SmoothingMode.AntiAlias;
+                gs.ScaleTransform(scale / f, scale / f);
+                using (SolidBrush br = new SolidBrush(boosted)) gs.FillPath(br, path);
+                using (Pen thick = new Pen(boosted, radius * 0.12f)) { thick.LineJoin = LineJoin.Round; gs.DrawPath(thick, path); }
+            }
+            InterpolationMode im = g.InterpolationMode;
+            PixelOffsetMode pm = g.PixelOffsetMode;
+            g.InterpolationMode = InterpolationMode.HighQualityBicubic;
+            g.PixelOffsetMode = PixelOffsetMode.HighQuality;
+            using (ImageAttributes ia = new ImageAttributes())
+            {
+                ia.SetWrapMode(WrapMode.TileFlipXY);   // no dark fringe at the bitmap edge
+                g.DrawImage(small, new PointF[] { new PointF(0, 0), new PointF(bw, 0), new PointF(0, bh) },
+                            new RectangleF(0, 0, sw, sh), GraphicsUnit.Pixel, ia);
+            }
+            g.InterpolationMode = im;
+            g.PixelOffsetMode = pm;
+        }
+    }
+
+    // Text rendered once at device resolution, centred in a w x h box (plus TEXT_PAD all round).
+    // glow = the ufo-title look: white text with
+    //        text-shadow: 0 0 10px rgba(255,255,255,.5), 0 0 20px rgba(255,220,150,.3)
+    Bitmap MakeTextBmp(string text, Font font, float w, float h, Color color, bool glow, out SizeF logical)
+    {
+        float bw = w + TEXT_PAD * 2f, bh = h + TEXT_PAD * 2f;
+        logical = new SizeF(bw, bh);
+        Bitmap b = new Bitmap(Math.Max(1, (int)Math.Ceiling(bw * scale)), Math.Max(1, (int)Math.Ceiling(bh * scale)), PixelFormat.Format32bppArgb);
         using (Graphics g = Graphics.FromImage(b))
         using (GraphicsPath path = BuildTextPath(text, font, font == titleFont ? TITLE_TRACKING : SUB_TRACKING))
         {
@@ -507,58 +575,23 @@ public class UfoAlert : Form
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.ScaleTransform(scale, scale);
 
-            // Centre (and shrink to fit if needed), leaving room for the extrusion
-            float depth = threeD ? EXTRUDE * 1.1f + 3f : 0f;
+            // Centre (and shrink to fit if needed)
             RectangleF tb = path.GetBounds();
-            float k = Math.Min(1f, (w - depth - 4f) / Math.Max(1f, tb.Width));
+            float k = Math.Min(1f, (w - 4f) / Math.Max(1f, tb.Width));
             using (Matrix m = new Matrix())
             {
                 m.Translate(-tb.X, -tb.Y, MatrixOrder.Append);
                 m.Scale(k, k, MatrixOrder.Append);
-                m.Translate((w - tb.Width * k - depth * 0.6f) / 2f, (h - tb.Height * k - depth) / 2f, MatrixOrder.Append);
+                m.Translate(TEXT_PAD + (w - tb.Width * k) / 2f, TEXT_PAD + (h - tb.Height * k) / 2f, MatrixOrder.Append);
                 path.Transform(m);
             }
 
-            if (!threeD)
+            if (glow)
             {
-                using (SolidBrush fill = new SolidBrush(color)) g.FillPath(fill, path);
-                return b;
+                Glow(g, path, Color.FromArgb(77, 255, 220, 150), 20f, bw, bh);  // 0 0 20px rgba(255,220,150,.3)
+                Glow(g, path, Color.FromArgb(128, 255, 255, 255), 10f, bw, bh); // 0 0 10px rgba(255,255,255,.5)
             }
-
-            // soft cast shadow
-            using (SolidBrush sh = new SolidBrush(Color.FromArgb(45, 0, 0, 0)))
-                for (int i = 0; i < 3; i++)
-                {
-                    GraphicsState s0 = g.Save();
-                    g.TranslateTransform(EXTRUDE * 0.7f + i, EXTRUDE * 1.1f + i);
-                    g.FillPath(sh, path);
-                    g.Restore(s0);
-                }
-
-            // extrusion: stacked copies, darkest at the back
-            Color near = Mix(accent, Color.Black, 0.35f), far = Mix(accent, Color.Black, 0.7f);
-            for (int i = EXTRUDE; i >= 1; i--)
-            {
-                GraphicsState s1 = g.Save();
-                g.TranslateTransform(i * 0.55f, i * 0.9f);
-                using (SolidBrush side = new SolidBrush(Mix(near, far, i / (float)EXTRUDE)))
-                    g.FillPath(side, path);
-                g.Restore(s1);
-            }
-
-            // metallic face
-            RectangleF bounds = path.GetBounds();
-            using (LinearGradientBrush face = new LinearGradientBrush(
-                new PointF(0, bounds.Top - 1), new PointF(0, bounds.Bottom + 1),
-                Color.FromArgb(255, 78, 84, 100), color))
-                g.FillPath(face, path);
-
-            // lit top edge (bevel highlight)
-            using (LinearGradientBrush hl = new LinearGradientBrush(
-                new PointF(0, bounds.Top - 1), new PointF(0, bounds.Bottom + 1),
-                Color.FromArgb(170, 255, 255, 255), Color.FromArgb(0, 255, 255, 255)))
-            using (Pen edge = new Pen(hl, 1f))
-                g.DrawPath(edge, path);
+            using (SolidBrush fill = new SolidBrush(color)) g.FillPath(fill, path);
         }
         return b;
     }
@@ -701,14 +734,16 @@ public class UfoAlert : Form
                     g.ScaleTransform(s, s);
                     g.TranslateTransform(-cx, -(bTop + bannerH / 2f));
 
-                    // Projection: a Bat-Signal-style disc of light on the "sky", with lit haze,
-                    // and the message as a dark silhouette inside it
+                    // Projection: a soft pool of light where the beam lands, with lit haze,
+                    // a gentle dark core so the glowing white text reads on any background
                     float dcy = bTop + bannerH / 2f;
                     RectangleF disc = new RectangleF(cx - discW / 2f, dcy - discH / 2f, discW, discH);
-                    Color light = Mix(accent, Color.White, 0.72f);
+                    Color light = Mix(accent, Color.White, 0.55f);
                     RectangleF halo = RectangleF.Inflate(disc, discW * 0.17f, discH * 0.17f);
-                    FillGlow(g, halo, A(light, 75 * p), new float[] { 0f, 0.6f, 1f }, new float[] { 0f, 0.5f, 1f });
-                    FillGlow(g, disc, A(light, 245 * p), new float[] { 0f, 0.72f, 0.95f, 1f }, new float[] { 0f, 0.08f, 0.35f, 1f });
+                    FillGlow(g, halo, A(light, 45 * p), new float[] { 0f, 0.6f, 1f }, new float[] { 0f, 0.5f, 1f });
+                    FillGlow(g, disc, A(light, 120 * p), new float[] { 0f, 0.7f, 1f }, new float[] { 0f, 0.3f, 1f });
+                    FillGlow(g, RectangleF.Inflate(disc, -discW * 0.08f, -discH * 0.12f), A(Color.FromArgb(10, 12, 18), 120 * p),
+                             new float[] { 0f, 0.8f, 1f }, new float[] { 0f, 0.45f, 1f });
                     using (GraphicsPath hazeClip = new GraphicsPath())
                     {
                         hazeClip.AddEllipse(disc);
@@ -717,12 +752,11 @@ public class UfoAlert : Form
                         DrawHaze(g, disc, p, t);
                         g.Restore(hs);
                     }
-                    using (Pen rimPen = new Pen(A(light, 110 * p), 2f))
+                    using (Pen rimPen = new Pen(A(light, 55 * p), 1.5f))
                         g.DrawEllipse(rimPen, RectangleF.Inflate(disc, -discW * 0.025f, -discH * 0.025f));
 
-                    RectangleF tr = subtitle.Length > 0
-                        ? new RectangleF(r.X + 12, r.Y + 2, titleSize.Width, titleSize.Height)
-                        : new RectangleF(r.X + 12, r.Y, titleSize.Width, titleSize.Height);
+                    RectangleF tr = new RectangleF(r.X + 12 - TEXT_PAD, (subtitle.Length > 0 ? r.Y + 2 : r.Y) - TEXT_PAD,
+                                                   titleSize.Width, titleSize.Height);
                     float tv = Math.Min(1f, fuzz);                       // 0 = clean signal, 1 = full old TV
                     float flicker = tv > 0.04f ? 1f - tv * 0.4f * (float)rng.NextDouble() : 1f;
                     float amp = fuzz * FUZZ_RANGE;
@@ -736,7 +770,7 @@ public class UfoAlert : Form
                     }
                     DrawFuzzy(g, titleBmp, tr, amp, p * flicker);
                     if (subtitle.Length > 0)
-                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16, r.Y + 49, subSize.Width, subSize.Height), amp * 0.3f, p * flicker);
+                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16 - TEXT_PAD, r.Y + 32 - TEXT_PAD, subSize.Width, subSize.Height), amp * 0.3f, p * flicker);
 
                     // Scanlines + a rolling bright bar while the signal is bad
                     if (tv > 0.03f)
@@ -859,4 +893,4 @@ if (-not (Test-Path $dll)) {
 }
 if (-not ('UfoAlert' -as [type])) { Add-Type -Path $dll -ErrorAction Stop }
 
-[UfoAlert]::Run($title, $msg, $rgb[0], $rgb[1], $rgb[2], $Seconds)
+[UfoAlert]::Run($title, $msg, $rgb[0], $rgb[1], $rgb[2], $Seconds, (Join-Path $PSScriptRoot 'fonts'))
