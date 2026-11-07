@@ -31,7 +31,7 @@ $project   = if ($data.cwd) { Split-Path $data.cwd -Leaf } else { 'Claude Code' 
 
 if ($hookEvent -eq 'Notification') {
     $title = 'Claude needs you'
-    $msg   = if ($data.message) { $data.message } else { 'Waiting for your input' }
+    $msg   = ''          # just the title, no second line
     $rgb   = 235, 140, 0     # orange
 } else {
     $title = 'Claude Finish'
