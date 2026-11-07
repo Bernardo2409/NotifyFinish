@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="assets/banner.png" alt="NotifyFinish" width="100%">
+</p>
+
 # NotifyFinish
 
 A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, macOS and Linux**: when Claude finishes a response (or needs your input), a sound plays and a notification pops up, even while you're watching a video or playing a game.

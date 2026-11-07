@@ -1,6 +1,6 @@
 // NotifyFinish tray app (Windows).
-// Lives in the system tray as a little traffic light:
-//   green = alerts ON, red = alerts OFF. Left-click the icon to toggle.
+// Lives in the system tray as the NotifyFinish UFO:
+//   green alien = alerts ON, grey UFO with red lights = alerts OFF. Left-click the icon to toggle.
 // The on/off state is a flag file (~/.claude/notifyfinish.off) that
 // notify.ps1 / notify.sh check before showing anything.
 
@@ -107,8 +107,8 @@ class TrayContext : ApplicationContext
 
     public TrayContext()
     {
-        onIcon = MakeIcon(Color.FromArgb(30, 190, 80));
-        offIcon = MakeIcon(Color.FromArgb(220, 50, 50));
+        onIcon = MakeIcon(true);    // the brand UFO: green alien, yellow lights
+        offIcon = MakeIcon(false);  // greyed out with red lights
 
         enabledItem = new ToolStripMenuItem("Alerts enabled", null, delegate { Toggle(); });
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
@@ -286,24 +286,11 @@ class TrayContext : ApplicationContext
         ExitThread();
     }
 
-    // Draw a simple traffic-light dot so no .ico file is needed.
-    // Drawn at the exact tray size for the current DPI so it stays sharp.
-    static Icon MakeIcon(Color color)
+    // The brand UFO (src/Logo.cs), drawn at the exact tray size for the current DPI so it stays sharp.
+    static Icon MakeIcon(bool on)
     {
         int s = Math.Max(16, SystemInformation.SmallIconSize.Width);
-        float k = s / 32f;
-        Bitmap bmp = new Bitmap(s, s);
-        using (Graphics g = Graphics.FromImage(bmp))
-        {
-            g.SmoothingMode = SmoothingMode.AntiAlias;
-            g.Clear(Color.Transparent);
-            using (SolidBrush back = new SolidBrush(Color.FromArgb(40, 40, 40)))
-                g.FillEllipse(back, 1 * k, 1 * k, 30 * k, 30 * k);
-            using (SolidBrush fill = new SolidBrush(color))
-                g.FillEllipse(fill, 5 * k, 5 * k, 22 * k, 22 * k);
-            using (SolidBrush shine = new SolidBrush(Color.FromArgb(90, 255, 255, 255)))
-                g.FillEllipse(shine, 9 * k, 7 * k, 10 * k, 7 * k);
-        }
-        return Icon.FromHandle(bmp.GetHicon());
+        using (Bitmap bmp = Logo.Mark(s, on))
+            return Icon.FromHandle(bmp.GetHicon());
     }
 }
