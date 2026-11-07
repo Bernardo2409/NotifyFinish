@@ -33,25 +33,25 @@ public static class Alerts
         return m.Success ? Regex.Replace(m.Groups[1].Value, "\\\\(.)", "$1") : null;
     }
 
-    // Short messages (max 4 words); one is picked at random for each alert
+    // Short messages (max 4 words, max 16 characters so they fit around the spiral);
+    // one is picked at random for each alert
     public static readonly string[] FinishedLines = {
         "Agent Finish",
         "Agent is done",
-        "Mission accomplished",
+        "Mission done",
         "Agent has landed",
-        "Task complete, Agent",
-        "Agent standing by",
+        "Task complete",
         "Ready for orders",
-        "Transmission complete",
+        "All done here",
+        "Job done",
     };
     public static readonly string[] NeedsYouLines = {
         "Agent needs you",
-        "Agent awaits orders",
         "Your move, human",
-        "Permission requested",
-        "Awaiting your command",
-        "Agent needs input",
-        "Need your approval",
+        "Awaiting orders",
+        "Input needed",
+        "Need your OK",
+        "Your call, boss",
     };
 
     static readonly Random rnd = new Random();
