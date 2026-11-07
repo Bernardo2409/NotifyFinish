@@ -90,8 +90,13 @@ notify_linux() {
 # --- Windows (Git Bash / MSYS / Cygwin): hand off to the PowerShell version ---
 notify_windows() {
     script_dir="$(cd "$(dirname "$0")" && pwd)"
-    printf '%s' "$raw" | powershell -NoProfile -ExecutionPolicy Bypass \
-        -File "$script_dir/notify.ps1" -Seconds "$SECONDS_UP"
+    if [ -x "$script_dir/NotifyFinish.exe" ] || [ -f "$script_dir/NotifyFinish.exe" ]; then
+        # fast path: the built app (hands off to the tray app if it's running)
+        printf '%s' "$raw" | "$script_dir/NotifyFinish.exe" --alert --seconds "$SECONDS_UP"
+    else
+        printf '%s' "$raw" | powershell -NoProfile -ExecutionPolicy Bypass \
+            -File "$script_dir/notify.ps1" -Seconds "$SECONDS_UP"
+    fi
 }
 
 case "$(uname -s)" in

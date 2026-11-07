@@ -7,13 +7,13 @@ A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, mac
 
 | OS | Script | What you get |
 |----|--------|--------------|
-| Windows | `notify.ps1` | 🛸 A UFO flies down from the top of the screen, opens a spinning 3D spiral cone with the message appearing left to right and slowly orbiting around it (smoke on landing and lift-off; the text tunes in like an old TV and turns sharp), hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
+| Windows | `NotifyFinish.exe` (`notify.ps1` fallback) | 🛸 A UFO flies down from the top of the screen, opens a spinning 3D spiral cone with the message appearing left to right and slowly orbiting around it (smoke on landing and lift-off; the text tunes in like an old TV and turns sharp), hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
 | macOS | `notify.sh` | Notification Center banner + system sound (Glass / Sosumi) |
 | Linux | `notify.sh` | Desktop notification with critical urgency (`notify-send`, fallback `zenity` / `kdialog`) + sound |
 
 ## Requirements
 
-- **Windows:** Windows 10/11 with Windows PowerShell 5.1 (built in).
+- **Windows:** Windows 10/11. The app is built with the C# compiler that ships with Windows (nothing to install).
 - **macOS:** nothing extra. Optional: `brew install terminal-notifier` for nicer notifications.
 - **Linux:** `notify-send` (package `libnotify-bin` on Debian/Ubuntu, `libnotify` on Fedora/Arch). Sound uses `canberra-gtk-play` or `paplay` if available.
 
@@ -25,9 +25,18 @@ A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, mac
    git clone https://github.com/Bernardo2409/NotifyFinish.git
    ```
 
-2. Add the hooks to `~/.claude/settings.json` (merge with your existing settings). Replace `COMMAND` with the line for your OS:
+2. **Windows:** build the app once and start it (then right-click the tray icon > **Start with Windows**):
 
-   - **Windows:**
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File .\build.ps1
+   .\NotifyFinish.exe
+   ```
+
+3. Add the hooks to `~/.claude/settings.json` (merge with your existing settings). Replace `COMMAND` with the line for your OS:
+
+   - **Windows** (recommended, no PowerShell per alert):
+     `[ -f \"$HOME/.claude/notifyfinish.off\" ] || \"C:/path/to/NotifyFinish/NotifyFinish.exe\" --alert`
+   - **Windows** (without building the app):
      `powershell -NoProfile -ExecutionPolicy Bypass -File \"C:/path/to/NotifyFinish/notify.ps1\"`
    - **macOS / Linux:**
      `bash \"/path/to/NotifyFinish/notify.sh\"`
@@ -54,9 +63,11 @@ A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, mac
    }
    ```
 
-   `notify.sh` also works on Windows under Git Bash (it hands off to `notify.ps1`), so you can use the same command everywhere if you sync your settings between machines.
+   The recommended Windows command needs Git Bash (which Claude Code uses on Windows): the `[ -f ... ] ||` part skips everything when alerts are turned off, and `NotifyFinish.exe --alert` hands the alert to the running tray app and exits in ~0.2 s. If the tray app isn't running, the exe shows the alert itself.
 
-3. In Claude Code, open `/hooks` once (or restart) so the new config is loaded.
+   `notify.sh` also works on Windows under Git Bash (it uses `NotifyFinish.exe`, or `notify.ps1` if the app isn't built), so you can use the same command everywhere if you sync your settings between machines.
+
+4. In Claude Code, open `/hooks` once (or restart) so the new config is loaded.
 
 ### macOS: allow the notifications
 
@@ -73,13 +84,13 @@ Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*,
 
 **Style** (Windows):
 
-| Style | Look | Cost per alert (measured) |
-|-------|------|---------------------------|
-| **UFO** (default) | Animated UFO, 3D spiral cone, smoke, orbiting text | ~5 s of CPU over the ~8 s animation, ~100 MB RAM |
-| **UFO classic** | The first UFO: flat beam with scanlines and a rounded green/orange banner, no smoke or text effects | ~2.4 s of CPU, ~100 MB RAM |
-| **Simple** | The original flat green/orange banner that blinks 3 times | ~1 s of CPU, ~95 MB RAM |
+| Style | Look | CPU per alert (measured) |
+|-------|------|--------------------------|
+| **UFO** (default) | Animated UFO, 3D spiral cone, smoke, orbiting text | ~4.5 s over the ~8 s animation |
+| **UFO classic** | The first UFO: flat beam with scanlines and a rounded green/orange banner, no smoke or text effects | ~1.5 s |
+| **Simple** | The original flat green/orange banner that blinks 3 times | ~0.1 s |
 
-RAM is about the same for both because most of it is PowerShell itself; the UFO costs more CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo`, `ufo-classic` or `simple`).
+Memory: the tray app sits at ~30-37 MB and draws every alert itself, so an alert adds no extra process beyond the ~0.2 s hand-off (~10-20 MB, gone immediately). The UFO only costs CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo`, `ufo-classic` or `simple`).
 
 Build it once (uses the C# compiler that ships with Windows, nothing to install):
 
@@ -99,7 +110,7 @@ bash notify.sh toggle
 bash notify.sh status
 ```
 
-Both use the same switch: the file `~/.claude/notifyfinish.off`. While it exists, the hooks still run but show nothing.
+Both use the same switch: the file `~/.claude/notifyfinish.off`. While it exists, nothing is shown (with the recommended Windows hook, nothing even starts).
 
 ## Test it
 

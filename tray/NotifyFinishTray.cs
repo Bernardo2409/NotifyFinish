@@ -27,9 +27,13 @@ static class Program
         try { SetProcessDPIAware(); } catch { }
     }
 
+    public static string PipeName { get { return "NotifyFinish_" + Environment.UserName; } }
+
     [STAThread]
-    static void Main()
+    static void Main(string[] args)
     {
+        if (Array.IndexOf(args, "--alert") >= 0) { AlertClient(args); return; }
+
         EnableHighDpi();
         bool created;
         using (Mutex mutex = new Mutex(true, "NotifyFinishTray_SingleInstance", out created))
@@ -38,6 +42,46 @@ static class Program
             Application.EnableVisualStyles();
             Application.Run(new TrayContext());
         }
+    }
+
+    // `NotifyFinish.exe --alert [--seconds N] [--force]`  (what the Claude Code hooks run)
+    // Hands the hook JSON to the running tray app and exits at once; if the tray app
+    // isn't running, shows the alert itself. No PowerShell involved either way.
+    static void AlertClient(string[] args)
+    {
+        bool force = Array.IndexOf(args, "--force") >= 0;
+        if (Alerts.IsOff && !force) return;
+
+        int seconds = 6;
+        int si = Array.IndexOf(args, "--seconds");
+        if (si >= 0 && si + 1 < args.Length) int.TryParse(args[si + 1], out seconds);
+
+        string json = "";
+        try
+        {
+            using (StreamReader r = new StreamReader(Console.OpenStandardInput(), System.Text.Encoding.UTF8))
+                json = r.ReadToEnd();
+        }
+        catch { }
+
+        string msg = seconds + " " + (force ? "1" : "0") + "\n" + json;
+        try
+        {
+            using (System.IO.Pipes.NamedPipeClientStream c =
+                   new System.IO.Pipes.NamedPipeClientStream(".", PipeName, System.IO.Pipes.PipeDirection.Out))
+            {
+                c.Connect(400);
+                byte[] data = System.Text.Encoding.UTF8.GetBytes(msg);
+                c.Write(data, 0, data.Length);
+                c.Flush();
+            }
+            return;   // the tray app will show it
+        }
+        catch { }     // tray app not running: show it ourselves
+
+        EnableHighDpi();
+        Application.EnableVisualStyles();
+        Alerts.Run(json, seconds, AppDomain.CurrentDomain.BaseDirectory);
     }
 }
 
@@ -97,6 +141,58 @@ class TrayContext : ApplicationContext
         refresh.Start();
 
         UpdateUi();
+
+        // Alerts arrive from the hooks (`NotifyFinish.exe --alert`) over a named pipe
+        ui = new Control();
+        IntPtr forceHandle = ui.Handle;   // create it on the UI thread so BeginInvoke works
+        Thread listener = new Thread(PipeLoop);
+        listener.IsBackground = true;
+        listener.Start();
+    }
+
+    readonly Control ui;
+
+    void PipeLoop()
+    {
+        while (true)
+        {
+            try
+            {
+                using (System.IO.Pipes.NamedPipeServerStream s = new System.IO.Pipes.NamedPipeServerStream(
+                    Program.PipeName, System.IO.Pipes.PipeDirection.In, 4))
+                {
+                    s.WaitForConnection();
+                    string msg;
+                    using (StreamReader r = new StreamReader(s, System.Text.Encoding.UTF8)) msg = r.ReadToEnd();
+                    ui.BeginInvoke((MethodInvoker)delegate { ShowAlert(msg); });
+                }
+            }
+            catch { Thread.Sleep(500); }
+        }
+    }
+
+    // msg = "<seconds> <force 0|1>\n<hook json>"
+    void ShowAlert(string msg)
+    {
+        try
+        {
+            int nl = msg.IndexOf('\n');
+            string head = nl >= 0 ? msg.Substring(0, nl) : msg;
+            string json = nl >= 0 ? msg.Substring(nl + 1) : "";
+            string[] parts = head.Split(' ');
+            int seconds = 6;
+            if (parts.Length > 0) int.TryParse(parts[0], out seconds);
+            bool force = parts.Length > 1 && parts[1] == "1";
+            if (!force && Alerts.IsOff) return;
+
+            Form f = Alerts.Create(json, seconds, AppDomain.CurrentDomain.BaseDirectory);
+            f.FormClosed += delegate { f.Dispose(); GC.Collect(); };   // give the memory back right away
+            f.Show();
+        }
+        catch (Exception ex)
+        {
+            icon.ShowBalloonTip(3000, "NotifyFinish", "Could not show alert: " + ex.Message, ToolTipIcon.Error);
+        }
     }
 
     static bool IsEnabled { get { return !File.Exists(FlagPath); } }
@@ -160,20 +256,7 @@ class TrayContext : ApplicationContext
 
     void Test()
     {
-        string script = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "notify.ps1");
-        if (!File.Exists(script))
-        {
-            icon.ShowBalloonTip(3000, "NotifyFinish", "notify.ps1 not found next to the app.", ToolTipIcon.Error);
-            return;
-        }
-        ProcessStartInfo psi = new ProcessStartInfo("powershell.exe",
-            "-NoProfile -ExecutionPolicy Bypass -File \"" + script + "\" -Force");
-        psi.UseShellExecute = false;
-        psi.CreateNoWindow = true;
-        psi.RedirectStandardInput = true;
-        Process p = Process.Start(psi);
-        p.StandardInput.Write("{\"hook_event_name\":\"Stop\"}");
-        p.StandardInput.Close();
+        ShowAlert("6 1\n{\"hook_event_name\":\"Stop\"}");
     }
 
     static bool IsStartup

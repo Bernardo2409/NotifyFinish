@@ -1,4 +1,4 @@
-# Builds NotifyFinish.exe (the Windows tray app) with the C# compiler that ships with Windows.
+# Builds NotifyFinish.exe (tray app + alerts) with the C# compiler that ships with Windows.
 # Usage: powershell -ExecutionPolicy Bypass -File .\build.ps1
 
 $ErrorActionPreference = 'Stop'
@@ -7,8 +7,14 @@ if (-not (Test-Path $csc)) { $csc = Join-Path $env:WINDIR 'Microsoft.NET\Framewo
 if (-not (Test-Path $csc)) { throw 'C# compiler (csc.exe) from .NET Framework 4 not found.' }
 
 $out = Join-Path $PSScriptRoot 'NotifyFinish.exe'
+$sources = @(
+    (Join-Path $PSScriptRoot 'tray\NotifyFinishTray.cs'),
+    (Join-Path $PSScriptRoot 'src\Alerts.cs'),
+    (Join-Path $PSScriptRoot 'src\UfoAlert.cs'),
+    (Join-Path $PSScriptRoot 'src\UfoClassic.cs')
+)
 & $csc /nologo /target:winexe /optimize+ "/out:$out" `
-    /r:System.Windows.Forms.dll /r:System.Drawing.dll `
-    (Join-Path $PSScriptRoot 'tray\NotifyFinishTray.cs')
+    /r:System.Windows.Forms.dll /r:System.Drawing.dll /r:System.Core.dll `
+    $sources
 if ($LASTEXITCODE -ne 0) { throw "Build failed ($LASTEXITCODE)" }
 Write-Host "Built $out"
