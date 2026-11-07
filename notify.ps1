@@ -79,7 +79,7 @@ public class UfoAlert : Form
     readonly string title, subtitle;
     readonly Color accent;
     readonly double stayMs;
-    readonly float H, scale, bannerW, bannerH, discW, discH;
+    readonly float H, scale, bannerW, bannerH;
     readonly Font titleFont, subFont;
     readonly Timer timer;
     DateTime start;
@@ -99,8 +99,18 @@ public class UfoAlert : Form
     const float TV_START = 1.6f;        // intensity when the banner arrives
     const double TUNE_IN_MS = 1400;     // how long it takes to become sharp
     const float HOVER_INTENSITY = 0.3f; // a little static while the mouse is over it
-    Bitmap titleBmp, subBmp, titleRed, titleCyan;
-    SizeF titleSize, subSize;
+    Bitmap subBmp;
+    Bitmap[] glyphs, glyphsRed, glyphsCyan;
+    float[] glyphAdv;
+    SizeF[] glyphSize;
+    float totalArc;
+
+    // ---- Title orbiting the spiral ----
+    const float RING_S = 0.82f;                // height on the funnel (0 = UFO, 1 = bottom)
+    const float FUNNEL_R = 170f;               // radius of the spiral where it ends
+    const float FUNNEL_END = BANNER_TOP + 24f; // y where the spiral ends
+    const double ORBIT = 2 * Math.PI / 36000;  // one full turn every 36 s (very slow)
+    SizeF subSize;
     float fuzz = TV_START, hoverFuzz;
     bool hovering;
 
@@ -166,17 +176,29 @@ public class UfoAlert : Form
         {
             float tw = TextWidth(this.title, titleFont, TITLE_TRACKING);
             float sw = TextWidth(this.subtitle, subFont, SUB_TRACKING);
-            bannerW = Math.Min(280f, Math.Max(180f, Math.Max(tw, sw) + 24f));   // max-width: 280px
+            // funnel width (max-width: 280px); a bit wider minimum so the orbiting title has room
+            bannerW = Math.Min(280f, Math.Max(240f, Math.Max(tw, sw) + 24f));
         }
-        discW = Math.Min(W - 16f, bannerW * 1.22f);
-        discH = bannerH * 1.75f + 6f;
-        H = BANNER_TOP + bannerH / 2f + discH * 0.5f * 1.35f + 8f;
+        H = FUNNEL_END + FUNNEL_R * 0.34f + (this.subtitle.Length > 0 ? 40f : 22f);
 
-        // Pre-render the text once; each frame it's redrawn as jittered 1px slices (fuzzy text)
-        float titleH = this.subtitle.Length > 0 ? 26f : bannerH;
-        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.White, true, out titleSize);
-        titleRed  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(255, 50, 90), false, out titleSize);
-        titleCyan = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(40, 225, 255), false, out titleSize);
+        // Pre-render each title letter once (white + glow, plus red/cyan for the TV ghosts).
+        // Every frame they're placed around the spiral and redrawn as jittered 1px slices.
+        int n = this.title.Length;
+        glyphs = new Bitmap[n]; glyphsRed = new Bitmap[n]; glyphsCyan = new Bitmap[n];
+        glyphAdv = new float[n]; glyphSize = new SizeF[n];
+        totalArc = 0f;
+        for (int i = 0; i < n; i++)
+        {
+            char ch = this.title[i];
+            if (ch == ' ') { glyphAdv[i] = titleFont.Size * 0.3f + TITLE_TRACKING; totalArc += glyphAdv[i]; continue; }
+            string sc = ch.ToString();
+            glyphAdv[i] = TextAdvance(sc, titleFont) + TITLE_TRACKING;
+            totalArc += glyphAdv[i];
+            float boxW = glyphAdv[i] + 8f;
+            glyphs[i]     = MakeTextBmp(sc, titleFont, boxW, 26f, Color.White, true, out glyphSize[i]);
+            glyphsRed[i]  = MakeTextBmp(sc, titleFont, boxW, 26f, Color.FromArgb(255, 50, 90), false, out glyphSize[i]);
+            glyphsCyan[i] = MakeTextBmp(sc, titleFont, boxW, 26f, Color.FromArgb(40, 225, 255), false, out glyphSize[i]);
+        }
         if (this.subtitle.Length > 0)
             subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 18f, Color.FromArgb(217, 255, 255, 255), false, out subSize);
         strandPen.StartCap = strandPen.EndCap = LineCap.Round;
@@ -364,6 +386,57 @@ public class UfoAlert : Form
         return new PointF(cx + R * (float)Math.Cos(theta), top + s * len + depth * R * 0.34f);
     }
 
+    // The title wrapped around the funnel like text on a turning cylinder.
+    // front = draw only the letters on the near side (after the strands) or the far side (before).
+    void DrawOrbitTitle(Graphics g, float cx, float top, float bottom, float rTop, float rBotIn, float beam, double t,
+                        bool front, float tv, float amp, float flicker)
+    {
+        float len = bottom - top;
+        if (len < 2f || glyphs == null) return;
+        float rBot = rTop + (rBotIn - rTop) * beam;            // same widening as DrawVortex
+        float R = rTop + (rBot - rTop) * (float)Math.Pow(RING_S, 1.45);
+        if (R < 10f) return;
+
+        // Start centred at the front, then turn slowly
+        // start centred at the front when the beam has fully opened, then drift round slowly
+        double theta0 = Math.PI / 2 + totalArc / (2.0 * R) + (t - (DESC + BEAM)) * ORBIT;
+        double arc = 0;
+        for (int i = 0; i < glyphs.Length; i++)
+        {
+            double mid = arc + glyphAdv[i] / 2.0;
+            arc += glyphAdv[i];
+            if (glyphs[i] == null) continue;
+
+            double th = theta0 - mid / R;
+            float d;
+            PointF pt = Funnel(cx, top, len, rTop, rBot, RING_S, th, out d);
+            if ((d >= 0) != front) continue;
+            if (Math.Abs(d) < 0.05f) continue;                  // edge-on: too thin to see
+
+            float near = 0.5f + 0.5f * d;                       // 0 back .. 1 front
+            float persp = 0.85f + 0.15f * d;
+            float a = beam * (0.2f + 0.8f * near * near);
+            float gw = glyphSize[i].Width * persp, gh = glyphSize[i].Height * persp;
+            // width * d: foreshortened at the sides, mirrored on the far side
+            RectangleF dest = new RectangleF(pt.X - gw * d / 2f, pt.Y - gh / 2f, gw * d, gh);
+
+            if (tv > 0.03f)
+            {
+                float split = 1.5f + tv * 6f;
+                DrawFuzzy(g, glyphsRed[i], Off(dest, -split), amp, a * tv * 0.9f);
+                DrawFuzzy(g, glyphsCyan[i], Off(dest, split), amp, a * tv * 0.9f);
+            }
+            DrawFuzzy(g, glyphs[i], dest, amp, a * flicker);
+        }
+    }
+
+    static float TextAdvance(string s, Font font)
+    {
+        using (Bitmap tmp = new Bitmap(1, 1))
+        using (Graphics mg = Graphics.FromImage(tmp))
+            return mg.MeasureString(s, font, PointF.Empty, StringFormat.GenericTypographic).Width;
+    }
+
     void DrawVortex(Graphics g, float cx, float top, float bottom, float rTop, float rBot, float beam, double t)
     {
         float len = bottom - top;
@@ -433,51 +506,6 @@ public class UfoAlert : Form
             float a = beam * (0.2f + 0.6f * (0.5f + 0.5f * d)) * (float)Math.Sin(Math.PI * s);
             using (SolidBrush dot = new SolidBrush(A(crown, 255 * a)))
                 g.FillEllipse(dot, pt.X - 0.9f, pt.Y - 0.9f, 1.8f, 1.8f);
-        }
-    }
-
-    // Soft radial light: colour c at the centre fading to transparent at the ellipse edge
-    static void FillGlow(Graphics g, RectangleF r, Color c, float[] factors, float[] positions)
-    {
-        if (c.A == 0 || r.Width < 1 || r.Height < 1) return;
-        using (GraphicsPath p = new GraphicsPath())
-        {
-            p.AddEllipse(r);
-            using (PathGradientBrush pg = new PathGradientBrush(p))
-            {
-                pg.CenterColor = c;
-                pg.SurroundColors = new Color[] { Color.FromArgb(0, c) };
-                Blend bl = new Blend();
-                bl.Factors = factors;
-                bl.Positions = positions;
-                pg.Blend = bl;
-                g.FillPath(pg, p);
-            }
-        }
-    }
-
-    // Clouds/haze lit by the projector: slowly drifting darker puffs inside the light disc
-    void DrawHaze(Graphics g, RectangleF disc, float p, double t)
-    {
-        RectangleF src = new RectangleF(0, 0, 64, 64);
-        float cxd = disc.X + disc.Width / 2f, cyd = disc.Y + disc.Height / 2f;
-        for (int k = 0; k < 11; k++)
-        {
-            float px = cxd + ((k % 4) - 1.5f) * disc.Width * 0.26f + (float)Math.Sin(t * 0.00035 + k * 1.7) * 10f;
-            float py = cyd + ((k / 4) - 1f) * disc.Height * 0.3f + (float)Math.Cos(t * 0.00028 + k) * 4f;
-            float rr = disc.Height * (0.32f + (k % 3) * 0.08f);
-            ColorMatrix cm = new ColorMatrix();
-            float tint = 0.62f;
-            cm.Matrix00 = Mix(accent, Color.Black, 0.35f).R / 255f * tint;
-            cm.Matrix11 = Mix(accent, Color.Black, 0.35f).G / 255f * tint;
-            cm.Matrix22 = Mix(accent, Color.Black, 0.35f).B / 255f * tint;
-            cm.Matrix33 = 0.2f * p;
-            using (ImageAttributes ia = new ImageAttributes())
-            {
-                ia.SetColorMatrix(cm);
-                PointF[] dst = { new PointF(px - rr, py - rr), new PointF(px + rr, py - rr), new PointF(px - rr, py + rr) };
-                g.DrawImage(smoke[k % 2], dst, src, GraphicsUnit.Pixel, ia);
-            }
         }
     }
 
@@ -701,13 +729,13 @@ public class UfoAlert : Form
                 g.ScaleTransform(scale, scale);
                 float cx = W / 2f;
 
-                // ---------- Tractor beam ----------
+                // ---------- Tractor beam + the title orbiting the spiral ----------
                 if (beam > 0.01f)
                 {
                     float top = y + 14f;
-                    float fullBottom = BANNER_TOP + bannerH * 0.5f;
+                    float fullBottom = FUNNEL_END;
                     float bottom = top + (fullBottom - top) * beam;
-                    float tw = 20f, bw = 20f + (bannerW / 2f - 26f) * beam;
+                    float tw = 20f, bw = 20f + (FUNNEL_R - 26f) * beam;
                     using (GraphicsPath beamPath = new GraphicsPath())
                     {
                         beamPath.AddPolygon(new PointF[] {
@@ -719,84 +747,25 @@ public class UfoAlert : Form
                             A(Mix(accent, Color.White, 0.45f), 45 * beam), A(accent, 10 * beam)))
                             g.FillPath(lb, beamPath);
                     }
-                    DrawVortex(g, cx, top, bottom, 15f, bw - 6f, beam, t);
-                }
 
-                // ---------- Banner (rides the beam) ----------
-                if (beam > 0.02f)
-                {
-                    float p = beam;
-                    float bTop = Lerp(y + 6f, BANNER_TOP, p);
-                    float s = 0.25f + 0.75f * p;
-                    RectangleF r = new RectangleF(cx - bannerW / 2f, bTop, bannerW, bannerH);
-                    GraphicsState st = g.Save();
-                    g.TranslateTransform(cx, bTop + bannerH / 2f);
-                    g.ScaleTransform(s, s);
-                    g.TranslateTransform(-cx, -(bTop + bannerH / 2f));
-
-                    // Projection: a soft pool of light where the beam lands, with lit haze,
-                    // a gentle dark core so the glowing white text reads on any background
-                    float dcy = bTop + bannerH / 2f;
-                    RectangleF disc = new RectangleF(cx - discW / 2f, dcy - discH / 2f, discW, discH);
-                    Color light = Mix(accent, Color.White, 0.55f);
-                    RectangleF halo = RectangleF.Inflate(disc, discW * 0.17f, discH * 0.17f);
-                    FillGlow(g, halo, A(light, 45 * p), new float[] { 0f, 0.6f, 1f }, new float[] { 0f, 0.5f, 1f });
-                    FillGlow(g, disc, A(light, 120 * p), new float[] { 0f, 0.7f, 1f }, new float[] { 0f, 0.3f, 1f });
-                    FillGlow(g, RectangleF.Inflate(disc, -discW * 0.08f, -discH * 0.12f), A(Color.FromArgb(10, 12, 18), 120 * p),
-                             new float[] { 0f, 0.8f, 1f }, new float[] { 0f, 0.45f, 1f });
-                    using (GraphicsPath hazeClip = new GraphicsPath())
-                    {
-                        hazeClip.AddEllipse(disc);
-                        GraphicsState hs = g.Save();
-                        g.SetClip(hazeClip, CombineMode.Intersect);
-                        DrawHaze(g, disc, p, t);
-                        g.Restore(hs);
-                    }
-                    using (Pen rimPen = new Pen(A(light, 55 * p), 1.5f))
-                        g.DrawEllipse(rimPen, RectangleF.Inflate(disc, -discW * 0.025f, -discH * 0.025f));
-
-                    RectangleF tr = new RectangleF(r.X + 12 - TEXT_PAD, (subtitle.Length > 0 ? r.Y + 2 : r.Y) - TEXT_PAD,
-                                                   titleSize.Width, titleSize.Height);
                     float tv = Math.Min(1f, fuzz);                       // 0 = clean signal, 1 = full old TV
                     float flicker = tv > 0.04f ? 1f - tv * 0.4f * (float)rng.NextDouble() : 1f;
                     float amp = fuzz * FUZZ_RANGE;
 
-                    // RGB split ghosts (chromatic aberration of a badly tuned CRT)
-                    if (tv > 0.03f)
-                    {
-                        float split = 1.5f + tv * 6f;
-                        DrawFuzzy(g, titleRed, Off(tr, -split), amp, p * tv * 0.9f);
-                        DrawFuzzy(g, titleCyan, Off(tr, split), amp, p * tv * 0.9f);
-                    }
-                    DrawFuzzy(g, titleBmp, tr, amp, p * flicker);
-                    if (subtitle.Length > 0)
-                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16 - TEXT_PAD, r.Y + 32 - TEXT_PAD, subSize.Width, subSize.Height), amp * 0.3f, p * flicker);
+                    DrawOrbitTitle(g, cx, top, bottom, 15f, bw - 6f, beam, t, false, tv, amp, flicker); // letters behind
+                    DrawVortex(g, cx, top, bottom, 15f, bw - 6f, beam, t);
+                    DrawOrbitTitle(g, cx, top, bottom, 15f, bw - 6f, beam, t, true, tv, amp, flicker);  // letters in front
 
-                    // Scanlines + a rolling bright bar while the signal is bad
-                    if (tv > 0.03f)
+                    // subtitle (orange alert) sits still just under the funnel
+                    if (subtitle.Length > 0 && beam > 0.02f)
                     {
-                        using (GraphicsPath clip = new GraphicsPath())
-                        {
-                            clip.AddEllipse(disc);
-                            GraphicsState cs = g.Save();
-                            g.SetClip(clip, CombineMode.Intersect);
-                            using (Pen sl = new Pen(Color.FromArgb((int)(70 * tv * p), 0, 0, 0), 1f))
-                                for (float sy = disc.Top + (float)((t / 45.0) % 3.0); sy < disc.Bottom; sy += 3f)
-                                    g.DrawLine(sl, disc.Left, sy, disc.Right, sy);
-                            float bar = disc.Top - 14f + (float)((t / 5.0) % (disc.Height + 28f));
-                            using (LinearGradientBrush lb = new LinearGradientBrush(new PointF(0, bar - 13), new PointF(0, bar + 13),
-                                Color.FromArgb(0, 255, 255, 255), Color.FromArgb((int)(90 * tv * p), 255, 255, 255)))
-                            {
-                                lb.SetBlendTriangularShape(0.5f);
-                                g.FillRectangle(lb, disc.Left, bar - 12, disc.Width, 24);
-                            }
-                            g.Restore(cs);
-                        }
+                        float subY = bottom + (bw - 6f) * 0.34f + 6f;
+                        DrawFuzzy(g, subBmp, new RectangleF(cx - subSize.Width / 2f, subY - TEXT_PAD, subSize.Width, subSize.Height),
+                                  amp * 0.3f, beam * flicker);
                     }
-                    g.Restore(st);
                 }
 
-                // ---------- Smoke (behind the saucer, in front of the banner) ----------
+                // ---------- Smoke (behind the saucer) ----------
                 DrawSmoke(g);
 
                 // ---------- UFO ----------
