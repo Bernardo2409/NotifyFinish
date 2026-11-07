@@ -7,7 +7,7 @@ A tiny alert for [Claude Code](https://claude.com/claude-code) on **Windows, mac
 
 | OS | Script | What you get |
 |----|--------|--------------|
-| Windows | `notify.ps1` | 🛸 A UFO flies down from the top of the screen, beams down a green/orange banner, hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
+| Windows | `notify.ps1` | 🛸 A UFO flies down from the top of the screen, beams down a green/orange banner (with smoke on landing and lift-off), hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
 | macOS | `notify.sh` | Notification Center banner + system sound (Glass / Sosumi) |
 | Linux | `notify.sh` | Desktop notification with critical urgency (`notify-send`, fallback `zenity` / `kdialog`) + sound |
 

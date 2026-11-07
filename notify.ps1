@@ -68,7 +68,7 @@ public class UfoAlert : Form
     [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
 
     // ---- Layout (logical px at 100% scaling) ----
-    const float W = 460f;
+    const float W = 520f;
     const float REST = 56f;        // saucer centre when hovering
     const float ABOVE = -80f;      // off-screen, above the top edge
     const float BANNER_TOP = 156f;
@@ -85,6 +85,14 @@ public class UfoAlert : Form
     DateTime start;
     bool leaving; double leaveAt; float leaveY, leaveBeam;
     float lastY = ABOVE, lastBeam;
+
+    // ---- Smoke particles ----
+    class Puff { public float X, Y, Vx, Vy, R, Grow, Life, MaxLife, Alpha; public int Shade; }
+    readonly System.Collections.Generic.List<Puff> puffs = new System.Collections.Generic.List<Puff>();
+    readonly Random rng = new Random();
+    readonly Bitmap[] smoke = new Bitmap[2];
+    double lastT = -1, lastWisp;
+    bool landed, tookOff, gone;
 
     public static void Run(string title, string subtitle, int r, int g, int b, int seconds)
     {
@@ -121,6 +129,9 @@ public class UfoAlert : Form
         Rectangle sb = Screen.PrimaryScreen.Bounds;
         int pw = (int)Math.Ceiling(W * scale), ph = (int)Math.Ceiling(H * scale);
         Bounds = new Rectangle(sb.X + (sb.Width - pw) / 2, sb.Y, pw, ph);
+
+        smoke[0] = MakeSmoke(Color.FromArgb(246, 246, 250));
+        smoke[1] = MakeSmoke(Color.FromArgb(200, 204, 214));
 
         MouseDown += delegate { SendAway(); };
 
@@ -168,12 +179,41 @@ public class UfoAlert : Form
     static double EaseOutCubic(double t) { t = 1 - t; return 1 - t * t * t; }
     static double EaseInCubic(double t) { return t * t * t; }
 
+    float Rnd(float a, float b) { return a + (float)rng.NextDouble() * (b - a); }
+
+    void Emit(float x, float y, float vx, float vy, float r, float grow, float life, float alpha)
+    {
+        Puff p = new Puff();
+        p.X = x; p.Y = y; p.Vx = vx; p.Vy = vy; p.R = r; p.Grow = grow;
+        p.Life = life; p.MaxLife = life; p.Alpha = alpha; p.Shade = rng.Next(2);
+        puffs.Add(p);
+    }
+
+    // A ring of smoke rolling out sideways from under the saucer (landing / lift-off)
+    void Burst(float y, int n, float spread, float power, float size)
+    {
+        float cx = W / 2f;
+        for (int i = 0; i < n; i++)
+        {
+            float dx = Rnd(-spread, spread);
+            float dir = dx < 0 ? -1f : 1f;
+            Emit(cx + dx * 0.6f, y + Rnd(-3f, 6f),
+                 dir * Rnd(0.8f, power) * (0.35f + Math.Abs(dx) / spread),
+                 Rnd(-0.45f, 0.55f), Rnd(size * 0.55f, size), Rnd(0.25f, 0.5f),
+                 Rnd(750f, 1300f), Rnd(0.55f, 0.8f));
+        }
+    }
+
     void Frame()
     {
         double t = (DateTime.Now - start).TotalMilliseconds;
+        float step = lastT < 0 ? 1f : (float)Math.Min(4.0, (t - lastT) / 16.0);
+        lastT = t;
         if (!leaving && t >= DESC + BEAM + stayMs) SendAway();
 
+        float cx = W / 2f;
         float y, beam;
+        bool ascending = false;
         if (!leaving)
         {
             if (t < DESC) { y = Lerp(ABOVE, REST, EaseOutBack(Clamp01(t / DESC))); beam = 0f; }
@@ -188,11 +228,99 @@ public class UfoAlert : Form
             double u = t - leaveAt;
             double unbeam = leaveBeam > 0.01f ? UNBEAM : 0;
             if (u < unbeam) { y = leaveY; beam = leaveBeam * (float)(1 - EaseInCubic(Clamp01(u / unbeam))); }
-            else if (u < unbeam + ASC) { y = Lerp(leaveY, ABOVE - 40f, EaseInBack(Clamp01((u - unbeam) / ASC))); beam = 0f; }
-            else { timer.Stop(); Close(); return; }
+            else if (u < unbeam + ASC) { y = Lerp(leaveY, ABOVE - 40f, EaseInBack(Clamp01((u - unbeam) / ASC))); beam = 0f; ascending = true; }
+            else { y = ABOVE - 40f; beam = 0f; gone = true; }
         }
+
+        // ---- Emit smoke ----
+        if (!gone)
+        {
+            if (!leaving && t < DESC)                       // thruster trail on the way down
+                for (int i = 0; i < 2; i++)
+                    Emit(cx + Rnd(-48f, 48f), y - 4f + Rnd(-4f, 4f), Rnd(-0.4f, 0.4f), Rnd(-0.7f, -0.1f),
+                         Rnd(6f, 11f), 0.25f, Rnd(500f, 800f), 0.45f);
+
+            if (!landed && !leaving && t >= DESC * 0.72)    // landing cloud
+            {
+                landed = true;
+                Burst(y + 14f, 46, 85f, 3.6f, 20f);
+            }
+
+            if (!leaving && t >= DESC && t - lastWisp > 110) // idle wisps while hovering
+            {
+                lastWisp = t;
+                Emit(cx + Rnd(-30f, 30f), y + 18f, Rnd(-0.3f, 0.3f), Rnd(0.3f, 0.8f),
+                     Rnd(4f, 7f), 0.15f, Rnd(500f, 800f), 0.3f);
+            }
+
+            if (ascending)                                  // lift-off: burst + plume
+            {
+                if (!tookOff) { tookOff = true; Burst(y + 16f, 38, 85f, 3.8f, 18f); }
+                if (y > -30f)
+                    for (int i = 0; i < 3; i++)
+                        Emit(cx + Rnd(-26f, 26f), y + 16f, Rnd(-0.8f, 0.8f), Rnd(1.0f, 2.4f),
+                             Rnd(7f, 13f), 0.4f, Rnd(800f, 1300f), 0.55f);
+            }
+        }
+
+        // ---- Update smoke ----
+        float dragX = (float)Math.Pow(0.955, step), dragY = (float)Math.Pow(0.97, step);
+        for (int i = puffs.Count - 1; i >= 0; i--)
+        {
+            Puff p = puffs[i];
+            p.Life -= 16f * step;
+            if (p.Life <= 0) { puffs.RemoveAt(i); continue; }
+            p.X += p.Vx * step; p.Y += p.Vy * step;
+            p.Vx *= dragX; p.Vy *= dragY;
+            p.R += p.Grow * step;
+        }
+
+        if (gone && puffs.Count == 0) { timer.Stop(); Close(); return; }
+
         lastY = y; lastBeam = beam;
         Render(y, beam, t);
+    }
+
+    static Bitmap MakeSmoke(Color c)
+    {
+        Bitmap b = new Bitmap(64, 64, PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(b))
+        using (GraphicsPath p = new GraphicsPath())
+        {
+            g.Clear(Color.Transparent);
+            p.AddEllipse(0, 0, 64, 64);
+            using (PathGradientBrush pg = new PathGradientBrush(p))
+            {
+                pg.CenterColor = Color.FromArgb(215, c);
+                pg.SurroundColors = new Color[] { Color.FromArgb(0, c) };
+                Blend bl = new Blend();
+                bl.Factors = new float[] { 0f, 0.55f, 0.88f, 1f };
+                bl.Positions = new float[] { 0f, 0.35f, 0.7f, 1f };
+                pg.Blend = bl;
+                g.FillEllipse(pg, 0, 0, 64, 64);
+            }
+        }
+        return b;
+    }
+
+    void DrawSmoke(Graphics g)
+    {
+        RectangleF src = new RectangleF(0, 0, 64, 64);
+        foreach (Puff p in puffs)
+        {
+            float lifeK = p.Life / p.MaxLife;
+            float fadeIn = Math.Min(1f, (p.MaxLife - p.Life) / 90f);
+            float a = p.Alpha * fadeIn * (float)Math.Pow(lifeK, 1.3);
+            if (a < 0.01f) continue;
+            ColorMatrix cm = new ColorMatrix();
+            cm.Matrix33 = a;
+            using (ImageAttributes ia = new ImageAttributes())
+            {
+                ia.SetColorMatrix(cm);
+                PointF[] dst = { new PointF(p.X - p.R, p.Y - p.R), new PointF(p.X + p.R, p.Y - p.R), new PointF(p.X - p.R, p.Y + p.R) };
+                g.DrawImage(smoke[p.Shade], dst, src, GraphicsUnit.Pixel, ia);
+            }
+        }
     }
 
     static Color A(Color c, double a) { return Color.FromArgb(Math.Max(0, Math.Min(255, (int)(a))), c.R, c.G, c.B); }
@@ -292,6 +420,9 @@ public class UfoAlert : Form
                     }
                     g.Restore(st);
                 }
+
+                // ---------- Smoke (behind the saucer, in front of the banner) ----------
+                DrawSmoke(g);
 
                 // ---------- UFO ----------
                 // under-glow
