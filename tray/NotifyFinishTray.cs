@@ -9,15 +9,28 @@ using System.Diagnostics;
 using System.Drawing;
 using System.Drawing.Drawing2D;
 using System.IO;
+using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
 
 static class Program
 {
+    [DllImport("user32.dll")] static extern bool SetProcessDpiAwarenessContext(IntPtr value);
+    [DllImport("user32.dll")] static extern bool SetProcessDPIAware();
+
+    // Without this Windows renders the app at 100% and stretches it -> blurry menus
+    static void EnableHighDpi()
+    {
+        try { if (SetProcessDpiAwarenessContext(new IntPtr(-4))) return; } // Per-monitor v2 (Win10 1703+)
+        catch (EntryPointNotFoundException) { }
+        try { SetProcessDPIAware(); } catch { }
+    }
+
     [STAThread]
     static void Main()
     {
+        EnableHighDpi();
         bool created;
         using (Mutex mutex = new Mutex(true, "NotifyFinishTray_SingleInstance", out created))
         {
@@ -148,20 +161,23 @@ class TrayContext : ApplicationContext
         ExitThread();
     }
 
-    // Draw a simple traffic-light dot so no .ico file is needed
+    // Draw a simple traffic-light dot so no .ico file is needed.
+    // Drawn at the exact tray size for the current DPI so it stays sharp.
     static Icon MakeIcon(Color color)
     {
-        Bitmap bmp = new Bitmap(32, 32);
+        int s = Math.Max(16, SystemInformation.SmallIconSize.Width);
+        float k = s / 32f;
+        Bitmap bmp = new Bitmap(s, s);
         using (Graphics g = Graphics.FromImage(bmp))
         {
             g.SmoothingMode = SmoothingMode.AntiAlias;
             g.Clear(Color.Transparent);
             using (SolidBrush back = new SolidBrush(Color.FromArgb(40, 40, 40)))
-                g.FillEllipse(back, 1, 1, 30, 30);
+                g.FillEllipse(back, 1 * k, 1 * k, 30 * k, 30 * k);
             using (SolidBrush fill = new SolidBrush(color))
-                g.FillEllipse(fill, 5, 5, 22, 22);
+                g.FillEllipse(fill, 5 * k, 5 * k, 22 * k, 22 * k);
             using (SolidBrush shine = new SolidBrush(Color.FromArgb(90, 255, 255, 255)))
-                g.FillEllipse(shine, 9, 7, 10, 7);
+                g.FillEllipse(shine, 9 * k, 7 * k, 10 * k, 7 * k);
         }
         return Icon.FromHandle(bmp.GetHicon());
     }
