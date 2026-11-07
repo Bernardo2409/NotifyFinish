@@ -76,9 +76,10 @@ Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*,
 | Style | Look | Cost per alert (measured) |
 |-------|------|---------------------------|
 | **UFO** (default) | Animated UFO, 3D spiral cone, smoke, orbiting text | ~5 s of CPU over the ~8 s animation, ~100 MB RAM |
+| **UFO classic** | The first UFO: flat beam with scanlines and a rounded green/orange banner, no smoke or text effects | ~2.4 s of CPU, ~100 MB RAM |
 | **Simple** | The original flat green/orange banner that blinks 3 times | ~1 s of CPU, ~95 MB RAM |
 
-RAM is about the same for both because most of it is PowerShell itself; the UFO costs more CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo` or `simple`).
+RAM is about the same for both because most of it is PowerShell itself; the UFO costs more CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo`, `ufo-classic` or `simple`).
 
 Build it once (uses the C# compiler that ships with Windows, nothing to install):
 

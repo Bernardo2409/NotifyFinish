@@ -55,6 +55,7 @@ class TrayContext : ApplicationContext
     readonly ToolStripMenuItem enabledItem;
     readonly ToolStripMenuItem startupItem;
     readonly ToolStripMenuItem ufoItem;
+    readonly ToolStripMenuItem classicItem;
     readonly ToolStripMenuItem simpleItem;
     readonly Icon onIcon;
     readonly Icon offIcon;
@@ -69,9 +70,11 @@ class TrayContext : ApplicationContext
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
 
         ufoItem = new ToolStripMenuItem("UFO (animated, more CPU)", null, delegate { SetStyle("ufo"); });
+        classicItem = new ToolStripMenuItem("UFO classic (first UFO, lighter)", null, delegate { SetStyle("ufo-classic"); });
         simpleItem = new ToolStripMenuItem("Simple (light)", null, delegate { SetStyle("simple"); });
         ToolStripMenuItem styleMenu = new ToolStripMenuItem("Style");
         styleMenu.DropDownItems.Add(ufoItem);
+        styleMenu.DropDownItems.Add(classicItem);
         styleMenu.DropDownItems.Add(simpleItem);
 
         ContextMenuStrip menu = new ContextMenuStrip();
@@ -149,9 +152,10 @@ class TrayContext : ApplicationContext
         icon.Text = on ? "NotifyFinish: ON (click to turn off)" : "NotifyFinish: OFF (click to turn on)";
         enabledItem.Checked = on;
         startupItem.Checked = IsStartup;
-        bool simple = Style == "simple";
-        ufoItem.Checked = !simple;
-        simpleItem.Checked = simple;
+        string style = Style;
+        ufoItem.Checked = style != "simple" && style != "ufo-classic";
+        classicItem.Checked = style == "ufo-classic";
+        simpleItem.Checked = style == "simple";
     }
 
     void Test()
