@@ -94,6 +94,16 @@ public class UfoAlert : Form
     double lastT = -1, lastWisp;
     bool landed, tookOff, gone;
 
+    // ---- Fuzzy text (inspired by React Bits' FuzzyText) ----
+    const float FUZZ_RANGE = 30f;       // max horizontal jitter (px) at intensity 1
+    const float BASE_INTENSITY = 0.18f; // idle vibration
+    const float HOVER_INTENSITY = 0.5f; // mouse over the banner
+    const double GLITCH_EVERY = 2200, GLITCH_FOR = 180;
+    Bitmap titleBmp, subBmp;
+    SizeF titleSize, subSize;
+    float fuzz = 2f;                    // current intensity (starts high: text "materialises")
+    bool hovering;
+
     public static void Run(string title, string subtitle, int r, int g, int b, int seconds)
     {
         try { SetProcessDPIAware(); } catch { }
@@ -109,7 +119,9 @@ public class UfoAlert : Form
 
         using (Graphics sg = Graphics.FromHwnd(IntPtr.Zero)) scale = sg.DpiX / 96f;
 
-        titleFont = new Font("Segoe UI", 26f, FontStyle.Bold, GraphicsUnit.Pixel);
+        titleFont = new Font("Segoe UI Black", 30f, FontStyle.Regular, GraphicsUnit.Pixel);
+        if (titleFont.Name != "Segoe UI Black")
+            titleFont = new Font("Segoe UI", 28f, FontStyle.Bold, GraphicsUnit.Pixel);
         subFont = new Font("Segoe UI", 14f, FontStyle.Regular, GraphicsUnit.Pixel);
 
         bannerH = this.subtitle.Length > 0 ? 78f : 58f;
@@ -121,6 +133,20 @@ public class UfoAlert : Form
             bannerW = Math.Min(W - 24f, Math.Max(260f, Math.Max(tw, sw) + 64f));
         }
         H = BANNER_TOP + bannerH + 16f;
+
+        // Pre-render the text once; each frame it's redrawn as jittered 1px slices (fuzzy text)
+        if (this.subtitle.Length > 0)
+        {
+            titleBmp = MakeTextBmp(this.title, titleFont, bannerW - 24f, 44f, out titleSize);
+            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 24f, out subSize);
+        }
+        else
+        {
+            titleBmp = MakeTextBmp(this.title, titleFont, bannerW - 24f, bannerH, out titleSize);
+        }
+
+        MouseEnter += delegate { hovering = true; };
+        MouseLeave += delegate { hovering = false; };
 
         FormBorderStyle = FormBorderStyle.None;
         ShowInTaskbar = false;
@@ -277,8 +303,76 @@ public class UfoAlert : Form
 
         if (gone && puffs.Count == 0) { timer.Stop(); Close(); return; }
 
+        // ---- Fuzzy text intensity ----
+        float goal;
+        if (leaving) goal = 1.6f;                                        // dissolve back into the beam
+        else if (t < DESC + BEAM * 0.6) goal = 2f;                       // still materialising
+        else if (((t - DESC) % GLITCH_EVERY) > GLITCH_EVERY - GLITCH_FOR) goal = 1f; // glitch burst
+        else goal = hovering ? HOVER_INTENSITY : BASE_INTENSITY;
+        float rate = goal > fuzz ? 0.45f : 0.07f;                        // fast attack, slow settle
+        fuzz += (goal - fuzz) * (1f - (float)Math.Pow(1f - rate, step));
+
         lastY = y; lastBeam = beam;
         Render(y, beam, t);
+    }
+
+    // Text rendered once at device resolution, centred in a box of logical size w x h
+    Bitmap MakeTextBmp(string text, Font font, float w, float h, out SizeF logical)
+    {
+        logical = new SizeF(w, h);
+        Bitmap b = new Bitmap(Math.Max(1, (int)Math.Ceiling(w * scale)), Math.Max(1, (int)Math.Ceiling(h * scale)), PixelFormat.Format32bppArgb);
+        using (Graphics g = Graphics.FromImage(b))
+        using (StringFormat sf = new StringFormat())
+        {
+            g.Clear(Color.Transparent);
+            g.SmoothingMode = SmoothingMode.AntiAlias;
+            g.TextRenderingHint = TextRenderingHint.AntiAlias;
+            g.ScaleTransform(scale, scale);
+            sf.Alignment = StringAlignment.Center;
+            sf.LineAlignment = StringAlignment.Center;
+            sf.Trimming = StringTrimming.EllipsisCharacter;
+            sf.FormatFlags = StringFormatFlags.NoWrap;
+            using (SolidBrush shadow = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
+                g.DrawString(text, font, shadow, new RectangleF(0, 1.5f, w, h), sf);
+            g.DrawString(text, font, Brushes.White, new RectangleF(0, 0, w, h), sf);
+        }
+        return b;
+    }
+
+    // FuzzyText: every 1px row of the text is drawn with its own random horizontal offset
+    void DrawFuzzy(Graphics g, Bitmap bmp, RectangleF dest, float amp, float alpha)
+    {
+        if (alpha < 0.01f) return;
+        ColorMatrix cm = new ColorMatrix();
+        cm.Matrix33 = alpha;
+        using (ImageAttributes ia = new ImageAttributes())
+        {
+            ia.SetColorMatrix(cm);
+            InterpolationMode im = g.InterpolationMode;
+            PixelOffsetMode pm = g.PixelOffsetMode;
+            g.InterpolationMode = InterpolationMode.NearestNeighbor;
+            g.PixelOffsetMode = PixelOffsetMode.Half;
+
+            if (amp * scale < 0.5f)
+            {
+                PointF[] whole = { dest.Location, new PointF(dest.Right, dest.Top), new PointF(dest.Left, dest.Bottom) };
+                g.DrawImage(bmp, whole, new RectangleF(0, 0, bmp.Width, bmp.Height), GraphicsUnit.Pixel, ia);
+            }
+            else
+            {
+                float rowH = dest.Height / bmp.Height;
+                for (int row = 0; row < bmp.Height; row++)
+                {
+                    float off = (float)Math.Round((rng.NextDouble() - 0.5) * amp * scale) / scale;
+                    float ry = dest.Top + row * rowH;
+                    PointF[] dst = { new PointF(dest.Left + off, ry), new PointF(dest.Right + off, ry), new PointF(dest.Left + off, ry + rowH) };
+                    g.DrawImage(bmp, dst, new RectangleF(0, row, bmp.Width, 1), GraphicsUnit.Pixel, ia);
+                }
+            }
+
+            g.InterpolationMode = im;
+            g.PixelOffsetMode = pm;
+        }
     }
 
     static Bitmap MakeSmoke(Color c)
@@ -401,22 +495,14 @@ public class UfoAlert : Form
                             g.DrawPath(edge, box);
                     }
 
-                    StringFormat sf = new StringFormat();
-                    sf.Alignment = StringAlignment.Center;
-                    sf.LineAlignment = StringAlignment.Center;
-                    sf.Trimming = StringTrimming.EllipsisCharacter;
-                    sf.FormatFlags = StringFormatFlags.NoWrap;
-                    using (SolidBrush white = new SolidBrush(Color.FromArgb((int)(255 * p), 255, 255, 255)))
+                    if (subtitle.Length > 0)
                     {
-                        if (subtitle.Length > 0)
-                        {
-                            g.DrawString(title, titleFont, white, new RectangleF(r.X + 12, r.Y + 6, r.Width - 24, 40), sf);
-                            g.DrawString(subtitle, subFont, white, new RectangleF(r.X + 16, r.Y + 46, r.Width - 32, 24), sf);
-                        }
-                        else
-                        {
-                            g.DrawString(title, titleFont, white, new RectangleF(r.X + 12, r.Y, r.Width - 24, r.Height), sf);
-                        }
+                        DrawFuzzy(g, titleBmp, new RectangleF(r.X + 12, r.Y + 4, titleSize.Width, titleSize.Height), fuzz * FUZZ_RANGE, p);
+                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16, r.Y + 47, subSize.Width, subSize.Height), fuzz * FUZZ_RANGE * 0.3f, p);
+                    }
+                    else
+                    {
+                        DrawFuzzy(g, titleBmp, new RectangleF(r.X + 12, r.Y, titleSize.Width, titleSize.Height), fuzz * FUZZ_RANGE, p);
                     }
                     g.Restore(st);
                 }
