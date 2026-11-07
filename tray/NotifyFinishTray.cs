@@ -13,6 +13,15 @@ using System.Runtime.InteropServices;
 using System.Threading;
 using System.Windows.Forms;
 using Microsoft.Win32;
+using System.Reflection;
+
+[assembly: AssemblyTitle("NotifyFinish")]
+[assembly: AssemblyProduct("NotifyFinish")]
+[assembly: AssemblyDescription("Know when your agent is done - alerts for Claude Code")]
+[assembly: AssemblyCopyright("Copyright (c) 2026 Bernardo Coelho - MIT License")]
+[assembly: AssemblyVersion("1.0.0.0")]
+[assembly: AssemblyFileVersion("1.0.0.0")]
+[assembly: AssemblyInformationalVersion("1.0.0")]
 
 static class Program
 {
@@ -113,15 +122,23 @@ class TrayContext : ApplicationContext
         enabledItem = new ToolStripMenuItem("Alerts enabled", null, delegate { Toggle(); });
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
 
-        ufoItem = new ToolStripMenuItem("UFO (animated, more CPU)", null, delegate { SetStyle("ufo"); });
-        classicItem = new ToolStripMenuItem("UFO classic (first UFO, lighter)", null, delegate { SetStyle("ufo-classic"); });
-        simpleItem = new ToolStripMenuItem("Simple (light)", null, delegate { SetStyle("simple"); });
+        // Style ids on disk stay "ufo" / "ufo-classic" / "simple"; these are just the display names
+        ufoItem = new ToolStripMenuItem("Mothership  \u2014  the full show", null, delegate { SetStyle("ufo"); });
+        ufoItem.ToolTipText = "Animated UFO, 3D spiral beam, smoke and orbiting text (uses the most CPU)";
+        classicItem = new ToolStripMenuItem("Scout Ship  \u2014  light UFO", null, delegate { SetStyle("ufo-classic"); });
+        classicItem.ToolTipText = "The original UFO: simple beam and a rounded banner";
+        simpleItem = new ToolStripMenuItem("Beacon  \u2014  minimal banner", null, delegate { SetStyle("simple"); });
+        simpleItem.ToolTipText = "A flat banner that blinks 3 times (lightest)";
         ToolStripMenuItem styleMenu = new ToolStripMenuItem("Style");
         styleMenu.DropDownItems.Add(ufoItem);
         styleMenu.DropDownItems.Add(classicItem);
         styleMenu.DropDownItems.Add(simpleItem);
 
         ContextMenuStrip menu = new ContextMenuStrip();
+        ToolStripMenuItem about = new ToolStripMenuItem("NotifyFinish " + Version);
+        about.Enabled = false;
+        menu.Items.Add(about);
+        menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(enabledItem);
         menu.Items.Add(styleMenu);
         menu.Items.Add(new ToolStripMenuItem("Test alert", null, delegate { Test(); }));
@@ -195,6 +212,9 @@ class TrayContext : ApplicationContext
         }
     }
 
+    static readonly string Version = ((AssemblyInformationalVersionAttribute)Attribute.GetCustomAttribute(
+        typeof(TrayContext).Assembly, typeof(AssemblyInformationalVersionAttribute))).InformationalVersion;
+
     static bool IsEnabled { get { return !File.Exists(FlagPath); } }
 
     static string Style
@@ -245,7 +265,7 @@ class TrayContext : ApplicationContext
     {
         bool on = IsEnabled;
         icon.Icon = on ? onIcon : offIcon;
-        icon.Text = on ? "NotifyFinish: ON (click to turn off)" : "NotifyFinish: OFF (click to turn on)";
+        icon.Text = "NotifyFinish " + Version + (on ? ": ON (click to turn off)" : ": OFF (click to turn on)");
         enabledItem.Checked = on;
         startupItem.Checked = IsStartup;
         string style = Style;

@@ -28,14 +28,13 @@ SECONDS_UP="${1:-8}"
 # --- Read the hook JSON (no jq needed) ----------------------------------------
 raw="$(cat 2>/dev/null)"
 
+# Portable (GNU and BSD/macOS sed): plain BRE, no \| alternation.
+# Only used for simple values like hook_event_name, which never contain quotes.
 json_field() {
-    printf '%s' "$raw" | tr -d '\n' | sed -n "s/.*\"$1\"[[:space:]]*:[[:space:]]*\"\(\([^\"\\\\]\|\\\\.\)*\)\".*/\1/p" | sed 's/\\"/"/g; s/\\\\/\\/g'
+    printf '%s' "$raw" | tr -d '\n' | sed -n 's/.*"'"$1"'"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p'
 }
 
 event="$(json_field hook_event_name)"
-message="$(json_field message)"
-cwd="$(json_field cwd)"
-project="$(basename "${cwd:-Claude Code}")"
 
 # Short messages (max 4 words, max 16 characters); one is picked at random for each alert
 # (keep in sync with src/Alerts.cs)

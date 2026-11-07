@@ -13,9 +13,17 @@ Each alert picks one short message (max 4 words, max 16 characters so it fits ar
 
 | OS | Script | What you get |
 |----|--------|--------------|
-| Windows | `NotifyFinish.exe` (`notify.ps1` fallback) | 🛸 A UFO flies down from the top of the screen, opens a spinning 3D spiral cone with the message appearing left to right and slowly orbiting around it (smoke on landing and lift-off; the text tunes in like an old TV and turns sharp), hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
-| macOS | `notify.sh` | Notification Center banner + system sound (Glass / Sosumi) |
-| Linux | `notify.sh` | Desktop notification with critical urgency (`notify-send`, fallback `zenity` / `kdialog`) + sound |
+| Windows | `NotifyFinish.exe` (tray app) | 🛸 A UFO flies down from the top of the screen, opens a spinning 3D spiral cone with the message appearing left to right and slowly orbiting around it (smoke on landing and lift-off; the text tunes in like an old TV and turns sharp), hovers for 6 s (or until clicked) and flies back up. Always on top, **doesn't steal focus**, plus a system sound |
+| macOS *(experimental)* | `notify.sh` | Notification Center banner + system sound (Glass / Sosumi) |
+| Linux *(experimental)* | `notify.sh` | Desktop notification with critical urgency (`notify-send`, fallback `zenity` / `kdialog`) + sound |
+
+> **macOS and Linux support is experimental:** it uses the system's own notifications (no UFO) and hasn't been tested on real machines yet. Feedback welcome.
+
+## Download (Windows)
+
+Grab **`NotifyFinish-v1.0.0.zip`** from the [Releases](../../releases) page, unzip it somewhere permanent (e.g. `C:\Tools\NotifyFinish`) and run **`NotifyFinish.exe`**. Then add the hooks (step 3 below).
+
+> The app isn't code-signed, so the first time Windows may show *"Windows protected your PC"*. Click **More info → Run anyway**.
 
 ## Requirements
 
@@ -31,7 +39,7 @@ Each alert picks one short message (max 4 words, max 16 characters so it fits ar
    git clone https://github.com/Bernardo2409/NotifyFinish.git
    ```
 
-2. **Windows:** build the app once and start it (then right-click the tray icon > **Start with Windows**):
+2. **Windows:** use the release `.zip` above, or build the app yourself and start it (then right-click the tray icon > **Start with Windows**):
 
    ```powershell
    powershell -ExecutionPolicy Bypass -File .\build.ps1
@@ -83,8 +91,8 @@ The first time, macOS may attribute the notification to **Script Editor** (or `t
 
 ### Windows: tray app
 
-A small app that sits in the system tray as a traffic light:
-**green = alerts ON**, **red = alerts OFF**. **Left-click the icon to toggle.**
+A small app that sits in the system tray as the NotifyFinish UFO:
+**green alien = alerts ON**, **grey UFO with red lights = alerts OFF**. **Left-click the icon to toggle.**
 
 Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*, *Exit*.
 
@@ -92,11 +100,11 @@ Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*,
 
 | Style | Look | CPU per alert (measured) |
 |-------|------|--------------------------|
-| **UFO** (default) | Animated UFO, 3D spiral cone, smoke, orbiting text | ~4.5 s over the ~8 s animation |
-| **UFO classic** | The first UFO: flat beam with scanlines and a rounded green/orange banner, no smoke or text effects | ~1.5 s |
-| **Simple** | The original flat green/orange banner that blinks 3 times | ~0.1 s |
+| 🛸 **Mothership** (default) | The full show: animated UFO, 3D spiral beam, smoke, text orbiting the beam | ~4.5 s over the ~8 s animation |
+| 🛰️ **Scout Ship** | The original UFO: simple beam with scanlines and a rounded green/orange banner | ~1.5 s |
+| 📡 **Beacon** | Minimal: a flat green/orange banner that blinks 3 times | ~0.1 s |
 
-Memory: the tray app sits at ~30-37 MB and draws every alert itself, so an alert adds no extra process beyond the ~0.2 s hand-off (~10-20 MB, gone immediately). The UFO only costs CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo`, `ufo-classic` or `simple`).
+Memory: the tray app sits at ~30-37 MB and draws every alert itself, so an alert adds no extra process beyond the ~0.2 s hand-off (~10-20 MB, gone immediately). The UFO only costs CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo` = Mothership, `ufo-classic` = Scout Ship, `simple` = Beacon).
 
 Build it once (uses the C# compiler that ships with Windows, nothing to install):
 
@@ -125,20 +133,23 @@ Both use the same switch: the file `~/.claude/notifyfinish.off`. While it exists
 echo '{"hook_event_name":"Stop"}' | bash notify.sh
 ```
 
-```powershell
-# Windows
-'{"hook_event_name":"Stop"}' | powershell -NoProfile -ExecutionPolicy Bypass -File .\notify.ps1
+**Windows:** right-click the tray icon → **Test alert**, or:
+
+```sh
+# Git Bash
+echo '{"hook_event_name":"Notification"}' | ./NotifyFinish.exe --alert --force
 ```
 
 ## Customize
 
-- **Duration:** add `-Seconds 15` (Windows) or `15` (macOS/Linux) to the end of the hook command.
-- **Windows UFO:** the first alert compiles the UFO window once (~1 s) and caches it in `%TEMP%`; after that it starts instantly.
-- **Colors, size, position, text:** edit the top of `notify.ps1` / `notify.sh`.
+- **Duration:** add `--seconds 15` (Windows, `NotifyFinish.exe`), `-Seconds 15` (`notify.ps1`) or `15` (macOS/Linux) to the end of the hook command.
+- **Messages:** edit the lists at the top of `src/Alerts.cs` (Windows) and `notify.sh` (macOS/Linux). Keep them to 4 words / 16 characters so they fit around the spiral.
+- **UFO look** (spiral, text orbit, smoke, timings): the constants at the top of `src/UfoAlert.cs`.
+- After changing anything in `src/` or `tray/`, rebuild with `build.ps1`.
 
 ## Limitations
 
-- **Windows:** games in **exclusive fullscreen** don't let any window draw on top of them, so you'll only hear the sound. Use **borderless / windowed fullscreen** to see the banner.
+- **Windows:** games in **exclusive fullscreen** don't let any window draw on top of them, so you'll only hear the sound. Use **borderless / windowed fullscreen** to see the UFO.
 - **macOS:** notifications follow your Focus / Do Not Disturb settings.
 - **Linux:** how notifications look and whether they show over fullscreen apps depends on your desktop environment.
 
