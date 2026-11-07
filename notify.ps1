@@ -94,15 +94,21 @@ public class UfoAlert : Form
     double lastT = -1, lastWisp;
     bool landed, tookOff, gone;
 
-    // ---- Fuzzy text (inspired by React Bits' FuzzyText) ----
+    // ---- Old-TV text: starts as a fuzzy, RGB-split, scanlined signal and tunes in to sharp ----
     const float FUZZ_RANGE = 30f;       // max horizontal jitter (px) at intensity 1
-    const float BASE_INTENSITY = 0.18f; // idle vibration
-    const float HOVER_INTENSITY = 0.5f; // mouse over the banner
-    const double GLITCH_EVERY = 2200, GLITCH_FOR = 180;
-    Bitmap titleBmp, subBmp;
+    const float TV_START = 1.6f;        // intensity when the banner arrives
+    const double TUNE_IN_MS = 1400;     // how long it takes to become sharp
+    const float HOVER_INTENSITY = 0.3f; // a little static while the mouse is over it
+    Bitmap titleBmp, subBmp, titleRed, titleCyan;
     SizeF titleSize, subSize;
-    float fuzz = 2f;                    // current intensity (starts high: text "materialises")
+    float fuzz = TV_START, hoverFuzz;
     bool hovering;
+
+    // ---- Spiral vortex beam (inspired by React Bits Pro's Spiral Funnel) ----
+    const int STRANDS = 14, SEGS = 36;
+    const double TWIST = 1.7 * Math.PI;  // how tightly the strands wind
+    const double SPIN = 0.0021;          // radians per ms
+    readonly Pen strandPen = new Pen(Color.White, 1f), glowPen = new Pen(Color.White, 4f);
 
     public static void Run(string title, string subtitle, int r, int g, int b, int seconds)
     {
@@ -135,15 +141,14 @@ public class UfoAlert : Form
         H = BANNER_TOP + bannerH + 16f;
 
         // Pre-render the text once; each frame it's redrawn as jittered 1px slices (fuzzy text)
+        float titleH = this.subtitle.Length > 0 ? 44f : bannerH;
+        titleBmp  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.White, true, out titleSize);
+        titleRed  = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(255, 50, 90), false, out titleSize);
+        titleCyan = MakeTextBmp(this.title, titleFont, bannerW - 24f, titleH, Color.FromArgb(40, 225, 255), false, out titleSize);
         if (this.subtitle.Length > 0)
-        {
-            titleBmp = MakeTextBmp(this.title, titleFont, bannerW - 24f, 44f, out titleSize);
-            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 24f, out subSize);
-        }
-        else
-        {
-            titleBmp = MakeTextBmp(this.title, titleFont, bannerW - 24f, bannerH, out titleSize);
-        }
+            subBmp = MakeTextBmp(this.subtitle, subFont, bannerW - 32f, 24f, Color.White, true, out subSize);
+        strandPen.StartCap = strandPen.EndCap = LineCap.Round;
+        glowPen.StartCap = glowPen.EndCap = LineCap.Round;
 
         MouseEnter += delegate { hovering = true; };
         MouseLeave += delegate { hovering = false; };
@@ -204,6 +209,8 @@ public class UfoAlert : Form
     static double EaseInBack(double t) { const double c1 = 1.6, c3 = c1 + 1; return c3 * t * t * t - c1 * t * t; }
     static double EaseOutCubic(double t) { t = 1 - t; return 1 - t * t * t; }
     static double EaseInCubic(double t) { return t * t * t; }
+    static double EaseInOutCubic(double t) { return t < 0.5 ? 4 * t * t * t : 1 - Math.Pow(-2 * t + 2, 3) / 2; }
+    static RectangleF Off(RectangleF r, float dx) { return new RectangleF(r.X + dx, r.Y, r.Width, r.Height); }
 
     float Rnd(float a, float b) { return a + (float)rng.NextDouble() * (b - a); }
 
@@ -303,21 +310,102 @@ public class UfoAlert : Form
 
         if (gone && puffs.Count == 0) { timer.Stop(); Close(); return; }
 
-        // ---- Fuzzy text intensity ----
-        float goal;
-        if (leaving) goal = 1.6f;                                        // dissolve back into the beam
-        else if (t < DESC + BEAM * 0.6) goal = 2f;                       // still materialising
-        else if (((t - DESC) % GLITCH_EVERY) > GLITCH_EVERY - GLITCH_FOR) goal = 1f; // glitch burst
-        else goal = hovering ? HOVER_INTENSITY : BASE_INTENSITY;
-        float rate = goal > fuzz ? 0.45f : 0.07f;                        // fast attack, slow settle
-        fuzz += (goal - fuzz) * (1f - (float)Math.Pow(1f - rate, step));
+        // ---- Old-TV intensity: tune in -> sharp -> lose signal on the way out ----
+        double tuneT = t - (DESC + BEAM * 0.35);
+        float intro = tuneT <= 0 ? TV_START : TV_START * (float)(1 - EaseInOutCubic(Clamp01(tuneT / TUNE_IN_MS)));
+        float outro = 0f;
+        if (leaving) outro = TV_START * (float)EaseInCubic(Clamp01((t - leaveAt) / UNBEAM));
+        float hoverGoal = hovering && !leaving ? HOVER_INTENSITY : 0f;
+        hoverFuzz += (hoverGoal - hoverFuzz) * (1f - (float)Math.Pow(0.85, step));
+        fuzz = Math.Max(intro, Math.Max(outro, hoverFuzz));
 
         lastY = y; lastBeam = beam;
         Render(y, beam, t);
     }
 
+    // A point on the funnel: s = 0 (UFO) .. 1 (banner), theta = angle around the axis.
+    // Returns the 2D point and sin(theta) (>0 = front, <0 = back).
+    static PointF Funnel(float cx, float top, float len, float rTop, float rBot, float s, double theta, out float depth)
+    {
+        float R = rTop + (rBot - rTop) * (float)Math.Pow(s, 1.45);
+        depth = (float)Math.Sin(theta);
+        return new PointF(cx + R * (float)Math.Cos(theta), top + s * len + depth * R * 0.34f);
+    }
+
+    void DrawVortex(Graphics g, float cx, float top, float bottom, float rTop, float rBot, float beam, double t)
+    {
+        float len = bottom - top;
+        if (len < 2f) return;
+        // Widen as the beam extends so the funnel "opens up"
+        rBot = rTop + (rBot - rTop) * beam;
+        Color crown = Mix(accent, Color.White, 0.75f);   // near the UFO
+        Color baseC = Mix(accent, Color.White, 0.15f);   // near the banner
+        double spin = t * SPIN;
+
+        // Rim glow where the funnel leaves the saucer
+        using (SolidBrush rim = new SolidBrush(A(crown, 120 * beam)))
+            g.FillEllipse(rim, cx - rTop * 1.7f, top - 3f, rTop * 3.4f, 7f);
+
+        // Strands: back half first (dim, thin), then front half (bright, thick) for a 3D look
+        for (int pass = 0; pass < 2; pass++)
+            for (int i = 0; i < STRANDS; i++)
+            {
+                double ph = i * 2 * Math.PI / STRANDS;
+                float d0;
+                PointF prev = Funnel(cx, top, len, rTop, rBot, 0f, ph + spin, out d0);
+                for (int k = 1; k <= SEGS; k++)
+                {
+                    float s = k / (float)SEGS;
+                    float d;
+                    PointF pt = Funnel(cx, top, len, rTop, rBot, s, ph + spin + s * TWIST, out d);
+                    float dm = (d + d0) * 0.5f;
+                    if ((dm >= 0) == (pass == 1))
+                    {
+                        float near = 0.5f + 0.5f * dm;                         // 0 back .. 1 front
+                        float fade = (float)Math.Min(1.0, s * 6.0) * (1f - s * 0.35f);
+                        float a = beam * fade * (0.15f + 0.85f * near * near);
+                        Color c = Mix(crown, baseC, s);
+                        glowPen.Color = A(c, 255 * a * 0.32f);
+                        glowPen.Width = 3f + 6f * near;
+                        g.DrawLine(glowPen, prev, pt);
+                        strandPen.Color = A(c, 255 * a);
+                        strandPen.Width = 0.7f + 2.3f * near;
+                        g.DrawLine(strandPen, prev, pt);
+                    }
+                    prev = pt; d0 = d;
+                }
+            }
+
+        // Light pulses travelling down the strands
+        for (int i = 0; i < STRANDS; i += 2)
+        {
+            double sp = (t * 0.00055 + i * 0.618) % 1.0;
+            float s = (float)sp, d;
+            PointF pt = Funnel(cx, top, len, rTop, rBot, s, i * 2 * Math.PI / STRANDS + spin + s * TWIST, out d);
+            float near = 0.5f + 0.5f * d;
+            float a = beam * (0.25f + 0.75f * near) * (float)Math.Sin(Math.PI * s);
+            float rr = 1.6f + 2.2f * near;
+            using (SolidBrush halo = new SolidBrush(A(Color.White, 90 * a)))
+                g.FillEllipse(halo, pt.X - rr * 2.2f, pt.Y - rr * 2.2f, rr * 4.4f, rr * 4.4f);
+            using (SolidBrush core = new SolidBrush(A(Color.White, 255 * a)))
+                g.FillEllipse(core, pt.X - rr * 0.6f, pt.Y - rr * 0.6f, rr * 1.2f, rr * 1.2f);
+        }
+
+        // Dust specks swirling with the flow
+        for (int j = 0; j < 70; j++)
+        {
+            double sp = (j * 0.1373 + t * 0.00028 * (0.7 + (j % 5) * 0.12)) % 1.0;
+            float s = (float)sp, d;
+            float spreadK = 0.55f + ((j * 37) % 50) / 100f;            // inside / outside the strands
+            PointF pt = Funnel(cx, top, len, rTop * spreadK, rBot * spreadK, s, j * 2.399 + spin * 1.25 + s * TWIST, out d);
+            float a = beam * (0.2f + 0.6f * (0.5f + 0.5f * d)) * (float)Math.Sin(Math.PI * s);
+            using (SolidBrush dot = new SolidBrush(A(crown, 255 * a)))
+                g.FillEllipse(dot, pt.X - 0.9f, pt.Y - 0.9f, 1.8f, 1.8f);
+        }
+    }
+
     // Text rendered once at device resolution, centred in a box of logical size w x h
-    Bitmap MakeTextBmp(string text, Font font, float w, float h, out SizeF logical)
+    Bitmap MakeTextBmp(string text, Font font, float w, float h, Color color, bool withShadow, out SizeF logical)
     {
         logical = new SizeF(w, h);
         Bitmap b = new Bitmap(Math.Max(1, (int)Math.Ceiling(w * scale)), Math.Max(1, (int)Math.Ceiling(h * scale)), PixelFormat.Format32bppArgb);
@@ -332,9 +420,11 @@ public class UfoAlert : Form
             sf.LineAlignment = StringAlignment.Center;
             sf.Trimming = StringTrimming.EllipsisCharacter;
             sf.FormatFlags = StringFormatFlags.NoWrap;
-            using (SolidBrush shadow = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
-                g.DrawString(text, font, shadow, new RectangleF(0, 1.5f, w, h), sf);
-            g.DrawString(text, font, Brushes.White, new RectangleF(0, 0, w, h), sf);
+            if (withShadow)
+                using (SolidBrush shadow = new SolidBrush(Color.FromArgb(70, 0, 0, 0)))
+                    g.DrawString(text, font, shadow, new RectangleF(0, 1.5f, w, h), sf);
+            using (SolidBrush fill = new SolidBrush(color))
+                g.DrawString(text, font, fill, new RectangleF(0, 0, w, h), sf);
         }
         return b;
     }
@@ -456,18 +546,13 @@ public class UfoAlert : Form
                         beamPath.AddPolygon(new PointF[] {
                             new PointF(cx - tw, top), new PointF(cx + tw, top),
                             new PointF(cx + bw, bottom), new PointF(cx - bw, bottom) });
+                        // faint volume behind the strands
                         using (LinearGradientBrush lb = new LinearGradientBrush(
                             new PointF(0, top), new PointF(0, bottom + 1),
-                            A(Mix(accent, Color.White, 0.45f), 190 * beam), A(accent, 40 * beam)))
+                            A(Mix(accent, Color.White, 0.45f), 45 * beam), A(accent, 10 * beam)))
                             g.FillPath(lb, beamPath);
-
-                        GraphicsState st = g.Save();
-                        g.SetClip(beamPath);
-                        using (Pen scan = new Pen(Color.FromArgb((int)(70 * beam), 255, 255, 255), 2f))
-                            for (float ly = top + (float)((t / 22.0) % 12.0); ly < bottom; ly += 12f)
-                                g.DrawLine(scan, cx - bw, ly, cx + bw, ly);
-                        g.Restore(st);
                     }
+                    DrawVortex(g, cx, top, bottom, 15f, bw - 6f, beam, t);
                 }
 
                 // ---------- Banner (rides the beam) ----------
@@ -495,14 +580,43 @@ public class UfoAlert : Form
                             g.DrawPath(edge, box);
                     }
 
-                    if (subtitle.Length > 0)
+                    RectangleF tr = subtitle.Length > 0
+                        ? new RectangleF(r.X + 12, r.Y + 4, titleSize.Width, titleSize.Height)
+                        : new RectangleF(r.X + 12, r.Y, titleSize.Width, titleSize.Height);
+                    float tv = Math.Min(1f, fuzz);                       // 0 = clean signal, 1 = full old TV
+                    float flicker = tv > 0.04f ? 1f - tv * 0.4f * (float)rng.NextDouble() : 1f;
+                    float amp = fuzz * FUZZ_RANGE;
+
+                    // RGB split ghosts (chromatic aberration of a badly tuned CRT)
+                    if (tv > 0.03f)
                     {
-                        DrawFuzzy(g, titleBmp, new RectangleF(r.X + 12, r.Y + 4, titleSize.Width, titleSize.Height), fuzz * FUZZ_RANGE, p);
-                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16, r.Y + 47, subSize.Width, subSize.Height), fuzz * FUZZ_RANGE * 0.3f, p);
+                        float split = 1.5f + tv * 6f;
+                        DrawFuzzy(g, titleRed, Off(tr, -split), amp, p * tv * 0.9f);
+                        DrawFuzzy(g, titleCyan, Off(tr, split), amp, p * tv * 0.9f);
                     }
-                    else
+                    DrawFuzzy(g, titleBmp, tr, amp, p * flicker);
+                    if (subtitle.Length > 0)
+                        DrawFuzzy(g, subBmp, new RectangleF(r.X + 16, r.Y + 47, subSize.Width, subSize.Height), amp * 0.3f, p * flicker);
+
+                    // Scanlines + a rolling bright bar while the signal is bad
+                    if (tv > 0.03f)
                     {
-                        DrawFuzzy(g, titleBmp, new RectangleF(r.X + 12, r.Y, titleSize.Width, titleSize.Height), fuzz * FUZZ_RANGE, p);
+                        using (GraphicsPath clip = RoundRect(r, 16f))
+                        {
+                            GraphicsState cs = g.Save();
+                            g.SetClip(clip, CombineMode.Intersect);
+                            using (Pen sl = new Pen(Color.FromArgb((int)(85 * tv * p), 0, 0, 0), 1f))
+                                for (float sy = r.Top + (float)((t / 45.0) % 3.0); sy < r.Bottom; sy += 3f)
+                                    g.DrawLine(sl, r.Left, sy, r.Right, sy);
+                            float bar = r.Top - 14f + (float)((t / 5.0) % (r.Height + 28f));
+                            using (LinearGradientBrush lb = new LinearGradientBrush(new PointF(0, bar - 13), new PointF(0, bar + 13),
+                                Color.FromArgb(0, 255, 255, 255), Color.FromArgb((int)(80 * tv * p), 255, 255, 255)))
+                            {
+                                lb.SetBlendTriangularShape(0.5f);
+                                g.FillRectangle(lb, r.Left, bar - 12, r.Width, 24);
+                            }
+                            g.Restore(cs);
+                        }
                     }
                     g.Restore(st);
                 }
