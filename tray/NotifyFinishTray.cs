@@ -48,9 +48,14 @@ class TrayContext : ApplicationContext
     const string RunKey = @"Software\Microsoft\Windows\CurrentVersion\Run";
     const string RunName = "NotifyFinish";
 
+    static readonly string StylePath = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude", "notifyfinish.style");
+
     readonly NotifyIcon icon;
     readonly ToolStripMenuItem enabledItem;
     readonly ToolStripMenuItem startupItem;
+    readonly ToolStripMenuItem ufoItem;
+    readonly ToolStripMenuItem simpleItem;
     readonly Icon onIcon;
     readonly Icon offIcon;
     readonly System.Windows.Forms.Timer refresh;
@@ -63,8 +68,15 @@ class TrayContext : ApplicationContext
         enabledItem = new ToolStripMenuItem("Alerts enabled", null, delegate { Toggle(); });
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
 
+        ufoItem = new ToolStripMenuItem("UFO (animated, more CPU)", null, delegate { SetStyle("ufo"); });
+        simpleItem = new ToolStripMenuItem("Simple (light)", null, delegate { SetStyle("simple"); });
+        ToolStripMenuItem styleMenu = new ToolStripMenuItem("Style");
+        styleMenu.DropDownItems.Add(ufoItem);
+        styleMenu.DropDownItems.Add(simpleItem);
+
         ContextMenuStrip menu = new ContextMenuStrip();
         menu.Items.Add(enabledItem);
+        menu.Items.Add(styleMenu);
         menu.Items.Add(new ToolStripMenuItem("Test alert", null, delegate { Test(); }));
         menu.Items.Add(new ToolStripSeparator());
         menu.Items.Add(startupItem);
@@ -85,6 +97,29 @@ class TrayContext : ApplicationContext
     }
 
     static bool IsEnabled { get { return !File.Exists(FlagPath); } }
+
+    static string Style
+    {
+        get
+        {
+            try { return File.Exists(StylePath) ? File.ReadAllText(StylePath).Trim().ToLowerInvariant() : "ufo"; }
+            catch { return "ufo"; }
+        }
+    }
+
+    void SetStyle(string style)
+    {
+        try
+        {
+            Directory.CreateDirectory(Path.GetDirectoryName(StylePath));
+            File.WriteAllText(StylePath, style);
+        }
+        catch (Exception ex)
+        {
+            icon.ShowBalloonTip(3000, "NotifyFinish", "Could not change style: " + ex.Message, ToolTipIcon.Error);
+        }
+        UpdateUi();
+    }
 
     void Toggle()
     {
@@ -114,6 +149,9 @@ class TrayContext : ApplicationContext
         icon.Text = on ? "NotifyFinish: ON (click to turn off)" : "NotifyFinish: OFF (click to turn on)";
         enabledItem.Checked = on;
         startupItem.Checked = IsStartup;
+        bool simple = Style == "simple";
+        ufoItem.Checked = !simple;
+        simpleItem.Checked = simple;
     }
 
     void Test()

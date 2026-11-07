@@ -69,7 +69,16 @@ The first time, macOS may attribute the notification to **Script Editor** (or `t
 A small app that sits in the system tray as a traffic light:
 **green = alerts ON**, **red = alerts OFF**. **Left-click the icon to toggle.**
 
-Right-click menu: *Alerts enabled*, *Test alert*, *Start with Windows*, *Exit*.
+Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*, *Exit*.
+
+**Style** (Windows):
+
+| Style | Look | Cost per alert (measured) |
+|-------|------|---------------------------|
+| **UFO** (default) | Animated UFO, 3D spiral cone, smoke, orbiting text | ~5 s of CPU over the ~8 s animation, ~100 MB RAM |
+| **Simple** | The original flat green/orange banner that blinks 3 times | ~1 s of CPU, ~95 MB RAM |
+
+RAM is about the same for both because most of it is PowerShell itself; the UFO costs more CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo` or `simple`).
 
 Build it once (uses the C# compiler that ships with Windows, nothing to install):
 

@@ -42,6 +42,93 @@ if ($hookEvent -eq 'Notification') {
 # --- Sound --------------------------------------------------------------------
 [System.Media.SystemSounds]::Exclamation.Play()
 
+# --- Style: 'ufo' (animated, default) or 'simple' (light banner, the first version) ---
+# Chosen in the tray app (right-click > Style) or by writing ~/.claude/notifyfinish.style
+$style = 'ufo'
+$styleFile = Join-Path $env:USERPROFILE '.claude\notifyfinish.style'
+if (Test-Path $styleFile) { $style = "$(Get-Content $styleFile -Raw)".Trim().ToLower() }
+
+if ($style -eq 'simple') {
+    Add-Type -AssemblyName System.Windows.Forms, System.Drawing
+    if (-not ('NoFocusForm' -as [type])) {
+        Add-Type -WarningAction SilentlyContinue -ReferencedAssemblies System.Windows.Forms, System.Drawing -TypeDefinition @'
+using System;
+using System.Windows.Forms;
+public class NoFocusForm : Form {
+    protected override bool ShowWithoutActivation { get { return true; } }
+    protected override CreateParams CreateParams {
+        get {
+            CreateParams cp = base.CreateParams;
+            cp.ExStyle |= 0x08000000; // WS_EX_NOACTIVATE  (never steals focus from your game)
+            cp.ExStyle |= 0x00000008; // WS_EX_TOPMOST
+            cp.ExStyle |= 0x00000080; // WS_EX_TOOLWINDOW  (no taskbar button)
+            return cp;
+        }
+    }
+}
+'@
+    }
+
+    $color  = [System.Drawing.Color]::FromArgb($rgb[0], $rgb[1], $rgb[2])
+    $screen = [System.Windows.Forms.Screen]::PrimaryScreen.WorkingArea
+    $w = 520
+    $h = if ($msg) { 130 } else { 80 }
+
+    $form = New-Object NoFocusForm
+    $form.FormBorderStyle = 'None'
+    $form.StartPosition   = 'Manual'
+    $form.TopMost         = $true
+    $form.ShowInTaskbar   = $false
+    $form.BackColor       = $color
+    $form.Opacity         = 0.95
+    $form.Size            = New-Object System.Drawing.Size($w, $h)
+    $form.Location        = New-Object System.Drawing.Point(($screen.X + ($screen.Width - $w) / 2), ($screen.Y + 40))
+
+    $lblTitle = New-Object System.Windows.Forms.Label
+    $lblTitle.Text      = $title
+    $lblTitle.ForeColor = 'White'
+    $lblTitle.Font      = New-Object System.Drawing.Font('Segoe UI', 22, [System.Drawing.FontStyle]::Bold)
+    $lblTitle.AutoSize  = $false
+    $lblTitle.TextAlign = 'MiddleCenter'
+    if ($msg) { $lblTitle.SetBounds(0, 12, $w, 50) } else { $lblTitle.SetBounds(0, 0, $w, $h) }
+    $form.Controls.Add($lblTitle)
+    $labels = @($lblTitle)
+
+    if ($msg) {
+        $lblMsg = New-Object System.Windows.Forms.Label
+        $lblMsg.Text      = $msg
+        $lblMsg.ForeColor = 'White'
+        $lblMsg.Font      = New-Object System.Drawing.Font('Segoe UI', 12)
+        $lblMsg.AutoSize  = $false
+        $lblMsg.TextAlign = 'MiddleCenter'
+        $lblMsg.SetBounds(10, 68, ($w - 20), 50)
+        $form.Controls.Add($lblMsg)
+        $labels += $lblMsg
+    }
+
+    # Click anywhere to close
+    $close = { $form.Close() }
+    $form.Add_Click($close)
+    foreach ($l in $labels) { $l.Add_Click($close) }
+
+    # Blink 3 times, then auto-close
+    $script:ticks = 0
+    $timer = New-Object System.Windows.Forms.Timer
+    $timer.Interval = 500
+    $timer.Add_Tick({
+        $script:ticks++
+        if ($script:ticks -le 6) {
+            $form.BackColor = if ($script:ticks % 2) { [System.Drawing.Color]::White } else { $color }
+            $fg = if ($script:ticks % 2) { $color } else { [System.Drawing.Color]::White }
+            foreach ($l in $labels) { $l.ForeColor = $fg }
+        }
+        if ($script:ticks -ge ($Seconds * 2)) { $timer.Stop(); $form.Close() }
+    })
+    $timer.Start()
+    [System.Windows.Forms.Application]::Run($form)
+    exit 0
+}
+
 # --- The UFO window (C#, compiled once and cached in %TEMP%) -------------------
 $src = @'
 using System;
@@ -118,7 +205,7 @@ public class UfoAlert : Form
     bool hovering;
 
     // ---- Spiral vortex beam (inspired by React Bits Pro's Spiral Funnel) ----
-    const int STRANDS = 14, SEGS = 36;
+    const int STRANDS = 14, SEGS = 22;
     const double TWIST = 1.7 * Math.PI;  // how tightly the strands wind
     const double SPIN = 0.0021;          // radians per ms
     readonly Pen strandPen = new Pen(Color.White, 1f), glowPen = new Pen(Color.White, 4f);
@@ -220,11 +307,12 @@ public class UfoAlert : Form
 
         smoke[0] = MakeSmoke(Color.FromArgb(246, 246, 250));
         smoke[1] = MakeSmoke(Color.FromArgb(200, 204, 214));
+        BuildSmokeLevels();
 
         MouseDown += delegate { SendAway(); };
 
         timer = new Timer();
-        timer.Interval = 15;
+        timer.Interval = 33;   // ~30 fps is plenty for this and halves the CPU
         timer.Tick += delegate { Frame(); };
     }
 
@@ -326,14 +414,14 @@ public class UfoAlert : Form
         if (!gone)
         {
             if (!leaving && t < DESC)                       // thruster trail on the way down
-                for (int i = 0; i < 2; i++)
+                for (int i = 0; i < 1; i++)
                     Emit(cx + Rnd(-48f, 48f), y - 4f + Rnd(-4f, 4f), Rnd(-0.4f, 0.4f), Rnd(-0.7f, -0.1f),
                          Rnd(6f, 11f), 0.25f, Rnd(500f, 800f), 0.45f);
 
             if (!landed && !leaving && t >= DESC * 0.72)    // landing cloud
             {
                 landed = true;
-                Burst(y + 14f, 46, 85f, 3.6f, 20f);
+                Burst(y + 14f, 24, 85f, 3.6f, 26f);
             }
 
             if (!leaving && t >= DESC && t - lastWisp > 110) // idle wisps while hovering
@@ -345,9 +433,9 @@ public class UfoAlert : Form
 
             if (ascending)                                  // lift-off: burst + plume
             {
-                if (!tookOff) { tookOff = true; Burst(y + 16f, 38, 85f, 3.8f, 18f); }
+                if (!tookOff) { tookOff = true; Burst(y + 16f, 22, 85f, 3.8f, 24f); }
                 if (y > -30f)
-                    for (int i = 0; i < 3; i++)
+                    for (int i = 0; i < 2; i++)
                         Emit(cx + Rnd(-26f, 26f), y + 16f, Rnd(-0.8f, 0.8f), Rnd(1.0f, 2.4f),
                              Rnd(7f, 13f), 0.4f, Rnd(800f, 1300f), 0.55f);
             }
@@ -459,6 +547,9 @@ public class UfoAlert : Form
 
         // Strands: back half first (dim, thin), then front half (bright, thick) for a 3D look
         for (int pass = 0; pass < 2; pass++)
+        {
+            // far side is dim and thin: draw it the fast way; near side gets full anti-aliasing
+            g.SmoothingMode = pass == 0 ? SmoothingMode.HighSpeed : SmoothingMode.AntiAlias;
             for (int i = 0; i < STRANDS; i++)
             {
                 double ph = i * 2 * Math.PI / STRANDS;
@@ -476,9 +567,10 @@ public class UfoAlert : Form
                         float fade = (float)Math.Min(1.0, s * 6.0) * (1f - s * 0.35f);
                         float a = beam * fade * (0.15f + 0.85f * near * near);
                         Color c = Mix(crown, baseC, s);
+                        if (pass == 1 && near > 0.55f) {   // soft glow only where it shows: the near side
                         glowPen.Color = A(c, 255 * a * 0.32f);
                         glowPen.Width = 3f + 6f * near;
-                        g.DrawLine(glowPen, prev, pt);
+                        g.DrawLine(glowPen, prev, pt); }
                         strandPen.Color = A(c, 255 * a);
                         strandPen.Width = 0.7f + 2.3f * near;
                         g.DrawLine(strandPen, prev, pt);
@@ -486,6 +578,8 @@ public class UfoAlert : Form
                     prev = pt; d0 = d;
                 }
             }
+        }
+        g.SmoothingMode = SmoothingMode.AntiAlias;
 
         // Light pulses travelling down the strands
         for (int i = 0; i < STRANDS; i += 2)
@@ -496,10 +590,10 @@ public class UfoAlert : Form
             float near = 0.5f + 0.5f * d;
             float a = beam * (0.25f + 0.75f * near) * (float)Math.Sin(Math.PI * s);
             float rr = 1.6f + 2.2f * near;
-            using (SolidBrush halo = new SolidBrush(A(Color.White, 90 * a)))
-                g.FillEllipse(halo, pt.X - rr * 2.2f, pt.Y - rr * 2.2f, rr * 4.4f, rr * 4.4f);
-            using (SolidBrush core = new SolidBrush(A(Color.White, 255 * a)))
-                g.FillEllipse(core, pt.X - rr * 0.6f, pt.Y - rr * 0.6f, rr * 1.2f, rr * 1.2f);
+            {
+                g.FillEllipse(Brush(A(Color.White, 90 * a)), pt.X - rr * 2.2f, pt.Y - rr * 2.2f, rr * 4.4f, rr * 4.4f); }
+            {
+                g.FillEllipse(Brush(A(Color.White, 255 * a)), pt.X - rr * 0.6f, pt.Y - rr * 0.6f, rr * 1.2f, rr * 1.2f); }
         }
 
         // Dust specks swirling with the flow
@@ -510,8 +604,8 @@ public class UfoAlert : Form
             float spreadK = 0.55f + ((j * 37) % 50) / 100f;            // inside / outside the strands
             PointF pt = Funnel(cx, top, len, rTop * spreadK, rBot * spreadK, s, j * 2.399 + spin * 1.25 + s * TWIST, out d);
             float a = beam * (0.2f + 0.6f * (0.5f + 0.5f * d)) * (float)Math.Sin(Math.PI * s);
-            using (SolidBrush dot = new SolidBrush(A(crown, 255 * a)))
-                g.FillEllipse(dot, pt.X - 0.9f, pt.Y - 0.9f, 1.8f, 1.8f);
+            if (a > 0.02f)
+                g.FillEllipse(Brush(A(crown, 255 * a)), pt.X - 0.9f, pt.Y - 0.9f, 1.8f, 1.8f);
         }
     }
 
@@ -633,12 +727,9 @@ public class UfoAlert : Form
     // FuzzyText: every 1px row of the text is drawn with its own random horizontal offset
     void DrawFuzzy(Graphics g, Bitmap bmp, RectangleF dest, float amp, float alpha)
     {
-        if (alpha < 0.01f) return;
-        ColorMatrix cm = new ColorMatrix();
-        cm.Matrix33 = alpha;
-        using (ImageAttributes ia = new ImageAttributes())
+        if (alpha < 0.02f) return;
+        ImageAttributes ia = AlphaAttr(alpha);
         {
-            ia.SetColorMatrix(cm);
             InterpolationMode im = g.InterpolationMode;
             PixelOffsetMode pm = g.PixelOffsetMode;
             g.InterpolationMode = InterpolationMode.NearestNeighbor;
@@ -663,6 +754,34 @@ public class UfoAlert : Form
 
             g.InterpolationMode = im;
             g.PixelOffsetMode = pm;
+        }
+    }
+
+    const int SMOKE_LEVELS = 16;
+    Bitmap[][] smokeLv;
+
+    // Each smoke sprite pre-rendered at SMOKE_LEVELS opacities, 32x32 premultiplied (fast to blit)
+    void BuildSmokeLevels()
+    {
+        smokeLv = new Bitmap[2][];
+        for (int s = 0; s < 2; s++)
+        {
+            smokeLv[s] = new Bitmap[SMOKE_LEVELS];
+            for (int lv = 1; lv < SMOKE_LEVELS; lv++)
+            {
+                Bitmap b = new Bitmap(32, 32, PixelFormat.Format32bppPArgb);
+                using (Graphics g = Graphics.FromImage(b))
+                using (ImageAttributes ia = new ImageAttributes())
+                {
+                    ColorMatrix cm = new ColorMatrix();
+                    cm.Matrix33 = lv / (float)(SMOKE_LEVELS - 1);
+                    ia.SetColorMatrix(cm);
+                    g.Clear(Color.Transparent);
+                    g.InterpolationMode = InterpolationMode.HighQualityBilinear;
+                    g.DrawImage(smoke[s], new Rectangle(0, 0, 32, 32), 0, 0, 64, 64, GraphicsUnit.Pixel, ia);
+                }
+                smokeLv[s][lv] = b;
+            }
         }
     }
 
@@ -691,21 +810,20 @@ public class UfoAlert : Form
     void DrawSmoke(Graphics g)
     {
         RectangleF src = new RectangleF(0, 0, 64, 64);
+        CompositingQuality cq = g.CompositingQuality; InterpolationMode im = g.InterpolationMode;
+        g.CompositingQuality = CompositingQuality.HighSpeed;
+        g.InterpolationMode = InterpolationMode.Low;
         foreach (Puff p in puffs)
         {
             float lifeK = p.Life / p.MaxLife;
             float fadeIn = Math.Min(1f, (p.MaxLife - p.Life) / 90f);
             float a = p.Alpha * fadeIn * (float)Math.Pow(lifeK, 1.3);
-            if (a < 0.01f) continue;
-            ColorMatrix cm = new ColorMatrix();
-            cm.Matrix33 = a;
-            using (ImageAttributes ia = new ImageAttributes())
-            {
-                ia.SetColorMatrix(cm);
-                PointF[] dst = { new PointF(p.X - p.R, p.Y - p.R), new PointF(p.X + p.R, p.Y - p.R), new PointF(p.X - p.R, p.Y + p.R) };
-                g.DrawImage(smoke[p.Shade], dst, src, GraphicsUnit.Pixel, ia);
-            }
+            int lv = (int)Math.Round(a * (SMOKE_LEVELS - 1));
+            if (lv <= 0) continue;
+            // pre-faded sprite: a plain blit, no per-draw colour matrix (that path is very slow in GDI+)
+            g.DrawImage(smokeLv[p.Shade][Math.Min(SMOKE_LEVELS - 1, lv)], p.X - p.R, p.Y - p.R, p.R * 2f, p.R * 2f);
         }
+        g.CompositingQuality = cq; g.InterpolationMode = im;
     }
 
     static Color A(Color c, double a) { return Color.FromArgb(Math.Max(0, Math.Min(255, (int)(a))), c.R, c.G, c.B); }
@@ -723,12 +841,68 @@ public class UfoAlert : Form
         return p;
     }
 
+    // ---- Persistent canvas: a DIB section that GDI+ draws into and Windows reads directly ----
+    [StructLayout(LayoutKind.Sequential)]
+    struct BIH { public int biSize, biWidth, biHeight; public short biPlanes, biBitCount; public int biCompression, biSizeImage, biXPelsPerMeter, biYPelsPerMeter, biClrUsed, biClrImportant; }
+    [DllImport("gdi32.dll")] static extern IntPtr CreateDIBSection(IntPtr hdc, ref BIH bmi, uint usage, out IntPtr bits, IntPtr section, uint offset);
+    IntPtr canvasDc, canvasDib, canvasOld;
+    Bitmap canvas;
+    Graphics canvasG;
+
+    void EnsureCanvas()
+    {
+        if (canvas != null) return;
+        BIH h = new BIH();
+        h.biSize = Marshal.SizeOf(typeof(BIH));
+        h.biWidth = Width; h.biHeight = -Height;   // top-down
+        h.biPlanes = 1; h.biBitCount = 32;
+        IntPtr bits;
+        IntPtr screen = GetDC(IntPtr.Zero);
+        canvasDc = CreateCompatibleDC(screen);
+        canvasDib = CreateDIBSection(screen, ref h, 0, out bits, IntPtr.Zero, 0);
+        ReleaseDC(IntPtr.Zero, screen);
+        canvasOld = SelectObject(canvasDc, canvasDib);
+        // premultiplied ARGB = exactly what UpdateLayeredWindow wants, no conversion per frame
+        canvas = new Bitmap(Width, Height, Width * 4, PixelFormat.Format32bppPArgb, bits);
+        canvasG = Graphics.FromImage(canvas);
+        canvasG.CompositingMode = CompositingMode.SourceOver;
+    }
+
+    protected override void OnFormClosed(FormClosedEventArgs e)
+    {
+        if (canvasG != null) canvasG.Dispose();
+        if (canvas != null) canvas.Dispose();
+        if (canvasDc != IntPtr.Zero) { SelectObject(canvasDc, canvasOld); DeleteObject(canvasDib); DeleteDC(canvasDc); }
+        base.OnFormClosed(e);
+    }
+
+    // Cached alpha-only ImageAttributes (33 levels) instead of allocating one per draw call
+    readonly ImageAttributes[] alphaAttrs = new ImageAttributes[33];
+    ImageAttributes AlphaAttr(float a)
+    {
+        int k = Math.Max(0, Math.Min(32, (int)Math.Round(a * 32f)));
+        if (k == 32) return null;   // fully opaque: skip the slow colour-matrix path
+        if (alphaAttrs[k] == null)
+        {
+            ColorMatrix cm = new ColorMatrix();
+            cm.Matrix33 = k / 32f;
+            alphaAttrs[k] = new ImageAttributes();
+            alphaAttrs[k].SetColorMatrix(cm);
+        }
+        return alphaAttrs[k];
+    }
+
+    readonly SolidBrush brush = new SolidBrush(Color.White);   // reused for all the small dots
+    SolidBrush Brush(Color c) { brush.Color = c; return brush; }
+
     void Render(float y, float beam, double t)
     {
-        using (Bitmap bmp = new Bitmap(Width, Height, PixelFormat.Format32bppArgb))
+        EnsureCanvas();
         {
-            using (Graphics g = Graphics.FromImage(bmp))
+            Graphics g = canvasG;
             {
+                g.ResetTransform();
+                g.ResetClip();
                 g.Clear(Color.Transparent);
                 g.SmoothingMode = SmoothingMode.AntiAlias;
                 g.TextRenderingHint = TextRenderingHint.AntiAlias;
@@ -826,30 +1000,22 @@ public class UfoAlert : Form
                         g.FillEllipse(lb, lx - 3.5f, ly - 3.5f, 7, 7);
                 }
             }
-            Push(bmp);
+            g.Flush(FlushIntention.Sync);
+            Push();
         }
     }
 
-    void Push(Bitmap bmp)
+    void Push()
     {
         IntPtr screen = GetDC(IntPtr.Zero);
-        IntPtr mem = CreateCompatibleDC(screen);
-        IntPtr hbmp = bmp.GetHbitmap(Color.FromArgb(0));
-        IntPtr old = SelectObject(mem, hbmp);
         try
         {
             PT pos = new PT(Left, Top), src = new PT(0, 0);
-            SZ size = new SZ(bmp.Width, bmp.Height);
+            SZ size = new SZ(Width, Height);
             BLEND bl = new BLEND(); bl.Op = 0; bl.Flags = 0; bl.Alpha = 255; bl.Format = 1; // AC_SRC_ALPHA
-            UpdateLayeredWindow(Handle, screen, ref pos, ref size, mem, ref src, 0, ref bl, 2); // ULW_ALPHA
+            UpdateLayeredWindow(Handle, screen, ref pos, ref size, canvasDc, ref src, 0, ref bl, 2); // ULW_ALPHA
         }
-        finally
-        {
-            SelectObject(mem, old);
-            DeleteObject(hbmp);
-            DeleteDC(mem);
-            ReleaseDC(IntPtr.Zero, screen);
-        }
+        finally { ReleaseDC(IntPtr.Zero, screen); }
     }
 }
 '@
