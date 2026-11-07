@@ -65,6 +65,7 @@ public class UfoAlert : Form
     const float FUNNEL_R = 115f;               // radius of the cone where it ends
     const float FUNNEL_END = BANNER_TOP + 24f; // y where the spiral ends
     const double ORBIT = 2 * Math.PI / 36000;  // one full turn every 36 s (very slow)
+    const double START_IN = 0.5;               // first letter starts this far (radians) past the left edge
     const double REVEAL_STAGGER = 70;          // ms between letters appearing
     const double REVEAL_FADE = 260;            // ms for each letter to fade in
     SizeF subSize;
@@ -362,8 +363,9 @@ public class UfoAlert : Form
         if (R < 10f) return;
 
         // Start centred at the front, then turn slowly
-        // start centred at the front when the beam has fully opened, then drift round slowly
-        double theta0 = Math.PI / 2 + totalArc / (2.0 * R) - (t - (DESC + BEAM)) * ORBIT;   // drifts left -> right
+        // the first letter starts just past the left edge of the spiral (angle PI = left edge,
+        // PI/2 = front centre) when the beam has fully opened, then everything drifts right slowly
+        double theta0 = Math.PI - START_IN + glyphAdv[0] / (2.0 * R) - (t - (DESC + BEAM)) * ORBIT;
         double arc = 0;
         for (int i = 0; i < glyphs.Length; i++)
         {
