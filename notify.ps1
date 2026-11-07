@@ -106,10 +106,12 @@ public class UfoAlert : Form
     float totalArc;
 
     // ---- Title orbiting the spiral ----
-    const float RING_S = 0.82f;                // height on the funnel (0 = UFO, 1 = bottom)
-    const float FUNNEL_R = 170f;               // radius of the spiral where it ends
+    const float RING_S = 0.92f;                // height on the funnel (0 = UFO, 1 = bottom)
+    const float FUNNEL_R = 115f;               // radius of the cone where it ends
     const float FUNNEL_END = BANNER_TOP + 24f; // y where the spiral ends
     const double ORBIT = 2 * Math.PI / 36000;  // one full turn every 36 s (very slow)
+    const double REVEAL_STAGGER = 70;          // ms between letters appearing
+    const double REVEAL_FADE = 260;            // ms for each letter to fade in
     SizeF subSize;
     float fuzz = TV_START, hoverFuzz;
     bool hovering;
@@ -381,7 +383,7 @@ public class UfoAlert : Form
     // Returns the 2D point and sin(theta) (>0 = front, <0 = back).
     static PointF Funnel(float cx, float top, float len, float rTop, float rBot, float s, double theta, out float depth)
     {
-        float R = rTop + (rBot - rTop) * (float)Math.Pow(s, 1.45);
+        float R = rTop + (rBot - rTop) * s;                     // straight cone
         depth = (float)Math.Sin(theta);
         return new PointF(cx + R * (float)Math.Cos(theta), top + s * len + depth * R * 0.34f);
     }
@@ -394,12 +396,12 @@ public class UfoAlert : Form
         float len = bottom - top;
         if (len < 2f || glyphs == null) return;
         float rBot = rTop + (rBotIn - rTop) * beam;            // same widening as DrawVortex
-        float R = rTop + (rBot - rTop) * (float)Math.Pow(RING_S, 1.45);
+        float R = rTop + (rBot - rTop) * RING_S;
         if (R < 10f) return;
 
         // Start centred at the front, then turn slowly
         // start centred at the front when the beam has fully opened, then drift round slowly
-        double theta0 = Math.PI / 2 + totalArc / (2.0 * R) + (t - (DESC + BEAM)) * ORBIT;
+        double theta0 = Math.PI / 2 + totalArc / (2.0 * R) - (t - (DESC + BEAM)) * ORBIT;   // drifts left -> right
         double arc = 0;
         for (int i = 0; i < glyphs.Length; i++)
         {
@@ -415,7 +417,10 @@ public class UfoAlert : Form
 
             float near = 0.5f + 0.5f * d;                       // 0 back .. 1 front
             float persp = 0.85f + 0.15f * d;
-            float a = beam * (0.2f + 0.8f * near * near);
+            // letters fade in one by one, left to right
+            float reveal = (float)Clamp01((t - (DESC + BEAM * 0.35) - i * REVEAL_STAGGER) / REVEAL_FADE);
+            float a = beam * reveal * (0.2f + 0.8f * near * near);
+            if (a < 0.01f) continue;
             float gw = glyphSize[i].Width * persp, gh = glyphSize[i].Height * persp;
             // width * d: foreshortened at the sides, mirrored on the far side
             RectangleF dest = new RectangleF(pt.X - gw * d / 2f, pt.Y - gh / 2f, gw * d, gh);
