@@ -9,10 +9,10 @@ using System.Windows.Forms;
 
 public static class Alerts
 {
-    static readonly string ClaudeDir = Path.Combine(
+    static readonly string ConfigDir = Path.Combine(
         Environment.GetFolderPath(Environment.SpecialFolder.UserProfile), ".claude");
-    public static readonly string OffFlag = Path.Combine(ClaudeDir, "notifyfinish.off");
-    public static readonly string StyleFile = Path.Combine(ClaudeDir, "notifyfinish.style");
+    public static readonly string OffFlag = Path.Combine(ConfigDir, "notifyfinish.off");
+    public static readonly string StyleFile = Path.Combine(ConfigDir, "notifyfinish.style");
 
     public static bool IsOff { get { return File.Exists(OffFlag); } }
 

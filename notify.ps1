@@ -1,4 +1,4 @@
-# NotifyFinish - Windows alert when Claude Code finishes or needs your input.
+# NotifyFinish - Windows alert when your agent finishes or needs your input.
 #
 # Fast path (recommended): the hooks call NotifyFinish.exe --alert directly (see README),
 # which hands the alert to the running tray app - no PowerShell at all.

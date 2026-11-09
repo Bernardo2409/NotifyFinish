@@ -17,7 +17,7 @@ using System.Reflection;
 
 [assembly: AssemblyTitle("NotifyFinish")]
 [assembly: AssemblyProduct("NotifyFinish")]
-[assembly: AssemblyDescription("Know when your agent is done - alerts for Claude Code")]
+[assembly: AssemblyDescription("Know when your agent is done - alerts for AI coding agents")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Bernardo Coelho - MIT License")]
 [assembly: AssemblyVersion("1.0.0.0")]
 [assembly: AssemblyFileVersion("1.0.0.0")]
@@ -53,7 +53,7 @@ static class Program
         }
     }
 
-    // `NotifyFinish.exe --alert [--seconds N] [--force]`  (what the Claude Code hooks run)
+    // `NotifyFinish.exe --alert [--seconds N] [--force]`  (what the agent hooks run)
     // Hands the hook JSON to the running tray app and exits at once; if the tray app
     // isn't running, shows the alert itself. No PowerShell involved either way.
     static void AlertClient(string[] args)

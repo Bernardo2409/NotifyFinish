@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# NotifyFinish - notification + sound when Claude Code finishes or needs your input.
+# NotifyFinish - notification + sound when your agent finishes or needs your input.
 # macOS and Linux version. Called by the Stop / Notification hooks.
 # Receives the hook JSON on stdin.
 #
@@ -62,7 +62,7 @@ notify_macos() {
     [ -f "$sound" ] && afplay "$sound" >/dev/null 2>&1 &
 
     if has terminal-notifier; then
-        terminal-notifier -title "$title" -message "${body:- }" -group claude-notify-finish >/dev/null 2>&1
+        terminal-notifier -title "$title" -message "${body:- }" -group notify-finish >/dev/null 2>&1
     else
         # Escape for AppleScript string literals
         esc() { printf '%s' "$1" | sed 's/\\/\\\\/g; s/"/\\"/g'; }
@@ -84,7 +84,7 @@ notify_linux() {
 
     # Popup: "critical" urgency shows on top of fullscreen apps on most desktops
     if has notify-send; then
-        notify-send -u critical -t "$((SECONDS_UP * 1000))" -a "Claude Code" \
+        notify-send -u critical -t "$((SECONDS_UP * 1000))" -a "NotifyFinish" \
             -i dialog-information "$title" "$body" >/dev/null 2>&1
     elif has zenity; then
         zenity --notification --text="$title${body:+\n$body}" >/dev/null 2>&1 &
