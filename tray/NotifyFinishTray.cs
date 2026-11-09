@@ -19,9 +19,9 @@ using System.Reflection;
 [assembly: AssemblyProduct("NotifyFinish")]
 [assembly: AssemblyDescription("Know when your agent is done - alerts for AI coding agents")]
 [assembly: AssemblyCopyright("Copyright (c) 2026 Bernardo Coelho - MIT License")]
-[assembly: AssemblyVersion("1.0.0.0")]
-[assembly: AssemblyFileVersion("1.0.0.0")]
-[assembly: AssemblyInformationalVersion("1.0.0")]
+[assembly: AssemblyVersion("1.0.1.0")]
+[assembly: AssemblyFileVersion("1.0.1.0")]
+[assembly: AssemblyInformationalVersion("1.0.1")]
 
 static class Program
 {

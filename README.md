@@ -21,7 +21,7 @@ Each alert picks one short message (max 4 words, max 16 characters so it fits ar
 
 ## Download (Windows)
 
-Grab **`NotifyFinish-v1.0.0.zip`** from the [Releases](../../releases) page, unzip it somewhere permanent (e.g. `C:\Tools\NotifyFinish`) and run **`NotifyFinish.exe`**. Then add the hooks (step 3 below).
+Grab **`NotifyFinish-v1.0.1.zip`** from the [Releases](../../releases) page, unzip it somewhere permanent (e.g. `C:\Tools\NotifyFinish`) and run **`NotifyFinish.exe`**. Then add the hooks (step 3 below).
 
 > The app isn't code-signed, so the first time Windows may show *"Windows protected your PC"*. Click **More info → Run anyway**.
 
