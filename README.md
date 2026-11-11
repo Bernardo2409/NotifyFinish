@@ -4,6 +4,8 @@
 
 # NotifyFinish
 
+[![XERJ Corpus Hub contributor](https://hub.xerj.org/contributors/Bernardo2409/badge.svg)](https://hub.xerj.org/contributors/Bernardo2409)
+
 A tiny alert for your AI coding agent (currently [Claude Code](https://claude.com/claude-code)) on **Windows, macOS and Linux**: when the agent finishes a response (or needs your input), a sound plays and a notification pops up, even while you're watching a video or playing a game.
 
 - **Green** ("Agent Finish", "Mission done", "Agent has landed", ...): the agent finished its turn.
