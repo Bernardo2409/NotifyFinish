@@ -104,7 +104,7 @@ Right-click menu: *Alerts enabled*, *Style*, *Test alert*, *Start with Windows*,
 |-------|------|--------------------------|
 | 🛸 **Mothership** (default) | The full show: animated UFO, 3D spiral beam, smoke, text orbiting the beam | ~4.5 s over the ~8 s animation |
 | 🛰️ **Scout Ship** | The original UFO: simple beam with scanlines and a rounded green/orange banner | ~1.5 s |
-| ⚽ **Striker** | The alien runs up on a 3D pitch, shoots and scores: the net shakes, confetti and a big "Agent Finish" pops up where the *GOAL!* would be. When the agent needs you it goes orange and does keepy-ups, waiting for your pass ("Need your assist") | not measured yet |
+| ⚽ **Striker** | The alien runs up on a 3D pitch, shoots and scores: the net shakes, confetti and a big "Agent Finish" pops up where the *GOAL!* would be. When the agent needs you it goes orange and does keepy-ups, waiting for your pass ("Need your assist") | ~1.5 s over the ~4.5 s animation (~2.8 s when it needs you, it stays longer) |
 | 📡 **Beacon** | Minimal: a flat green/orange banner that blinks 3 times | ~0.1 s |
 
 Memory: the tray app sits at ~30-37 MB and draws every alert itself, so an alert adds no extra process beyond the ~0.2 s hand-off (~10-20 MB, gone immediately). The UFO only costs CPU while it animates. The choice is saved in `~/.claude/notifyfinish.style` (`ufo` = Mothership, `ufo-classic` = Scout Ship, `football` = Striker, `simple` = Beacon).
