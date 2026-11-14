@@ -12,6 +12,7 @@ $sources = @(
     (Join-Path $PSScriptRoot 'src\Alerts.cs'),
     (Join-Path $PSScriptRoot 'src\UfoAlert.cs'),
     (Join-Path $PSScriptRoot 'src\UfoClassic.cs'),
+    (Join-Path $PSScriptRoot 'src\FootballAlert.cs'),
     (Join-Path $PSScriptRoot 'src\Logo.cs')
 )
 

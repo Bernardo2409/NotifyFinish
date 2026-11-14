@@ -29,7 +29,7 @@ if (Test-Path $exe) {
 
 # Otherwise compile the shared alert code once and run it here.
 Add-Type -AssemblyName System.Windows.Forms, System.Drawing
-$files = 'Alerts.cs', 'UfoAlert.cs', 'UfoClassic.cs' | ForEach-Object { Join-Path $PSScriptRoot "src\$_" }
+$files = 'Alerts.cs', 'UfoAlert.cs', 'UfoClassic.cs', 'FootballAlert.cs' | ForEach-Object { Join-Path $PSScriptRoot "src\$_" }
 $code  = ($files | ForEach-Object { Get-Content $_ -Raw }) -join "`n"
 
 $md5  = [System.Security.Cryptography.MD5]::Create()

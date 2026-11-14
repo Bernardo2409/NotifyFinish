@@ -110,6 +110,7 @@ class TrayContext : ApplicationContext
     readonly ToolStripMenuItem ufoItem;
     readonly ToolStripMenuItem classicItem;
     readonly ToolStripMenuItem simpleItem;
+    readonly ToolStripMenuItem footballItem;
     readonly Icon onIcon;
     readonly Icon offIcon;
     readonly System.Windows.Forms.Timer refresh;
@@ -122,16 +123,19 @@ class TrayContext : ApplicationContext
         enabledItem = new ToolStripMenuItem("Alerts enabled", null, delegate { Toggle(); });
         startupItem = new ToolStripMenuItem("Start with Windows", null, delegate { ToggleStartup(); });
 
-        // Style ids on disk stay "ufo" / "ufo-classic" / "simple"; these are just the display names
+        // Style ids on disk stay "ufo" / "ufo-classic" / "football" / "simple"; these are just the display names
         ufoItem = new ToolStripMenuItem("Mothership - the full show", null, delegate { SetStyle("ufo"); });
         ufoItem.ToolTipText = "Animated UFO, 3D spiral beam, smoke and orbiting text (uses the most CPU)";
         classicItem = new ToolStripMenuItem("Scout Ship - light UFO", null, delegate { SetStyle("ufo-classic"); });
         classicItem.ToolTipText = "The original UFO: simple beam and a rounded banner";
+        footballItem = new ToolStripMenuItem("Striker - football goal", null, delegate { SetStyle("football"); });
+        footballItem.ToolTipText = "The alien shoots and scores: Agent Finish (keepy-ups when it needs you)";
         simpleItem = new ToolStripMenuItem("Beacon - minimal banner", null, delegate { SetStyle("simple"); });
         simpleItem.ToolTipText = "A flat banner that blinks 3 times (lightest)";
         ToolStripMenuItem styleMenu = new ToolStripMenuItem("Style");
         styleMenu.DropDownItems.Add(ufoItem);
         styleMenu.DropDownItems.Add(classicItem);
+        styleMenu.DropDownItems.Add(footballItem);
         styleMenu.DropDownItems.Add(simpleItem);
 
         ContextMenuStrip menu = new ContextMenuStrip();
@@ -269,8 +273,9 @@ class TrayContext : ApplicationContext
         enabledItem.Checked = on;
         startupItem.Checked = IsStartup;
         string style = Style;
-        ufoItem.Checked = style != "simple" && style != "ufo-classic";
+        ufoItem.Checked = style != "simple" && style != "ufo-classic" && style != "football";
         classicItem.Checked = style == "ufo-classic";
+        footballItem.Checked = style == "football";
         simpleItem.Checked = style == "simple";
     }
 

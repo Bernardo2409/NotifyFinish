@@ -52,6 +52,12 @@ public static class Alerts
         "Need your OK",
         "Your call, boss",
     };
+    // Striker style: the agent waits for your pass
+    public static readonly string[] NeedsYouFootballLines = {
+        "Need your assist",
+        "Pass me the ball",
+        "Your pass, boss",
+    };
 
     static readonly Random rnd = new Random();
     static string lastLine;
@@ -77,6 +83,8 @@ public static class Alerts
         {
             case "simple":      return new SimpleAlert(title, accent, seconds);
             case "ufo-classic": return UfoClassic.Create(title, "", accent, seconds);
+            // the goal is the finish, so it always says so
+            case "football":    return FootballAlert.Create(needsYou ? Pick(NeedsYouFootballLines) : "Agent Finish", accent, needsYou, seconds);
             default:            return UfoAlert.Create(title, "", accent, seconds, Path.Combine(appDir, "fonts"));
         }
     }
